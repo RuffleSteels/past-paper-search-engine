@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Overlay Test</title>
+    <style>
+        #container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .pageWrapper {
+            position: relative;
+        }
+        .pdf-canvas {
+            display: block;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+
+</div>
+
+<script type="module">
+    import * as pdfjsLib from "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.mjs";
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs";
+
+    const url = "papers/edexcel-physics-paper-3-2024-qp.pdf"; // served over http
+
+    const scale = 1;
+
+    const pageSplits = {}
+    let fontName = ''
+    /** Remove any DOM-based text layers that PDF.js may insert */
+    function removeTextLayers() {
+        document.querySelectorAll(".textLayer").forEach(el => el.remove());
+    }
+
+    /**
+     * Convert a text item into a rectangle in viewport coordinates
+     * @param {Object} item - PDF.js text item
+     * @param {Object} viewport - PDF.js viewport
+     * @param {CanvasRenderingContext2D} ctx - context for measuring text
+     */
+    function getTextItemRect(item, viewport, ctx) {
+        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const fontHeight = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 12;
+        const baselineX = tx[4];
+        const baselineY = tx[5];
+
+        ctx.save();
+        ctx.font = `${fontHeight}px sans-serif`;
+        ctx.textBaseline = "alphabetic";
+        const width = ctx.measureText(item.str).width;
+        ctx.restore();
+
+        const left = baselineX;
+        const top = baselineY - fontHeight;
+
+        return { left, top, width, height: fontHeight };
+    }
+    function pdfRectToViewportRect(rect, viewport) {
+        const { left, top, width, height } = rect;
+
+        // bottom-left in PDF user space
+        const [vx1, vy1] = viewport.convertToViewportPoint(left, top);
+        // top-right in PDF user space
+        const [vx2, vy2] = viewport.convertToViewportPoint(left + width, top + height);
+
+        return {
+            left: Math.min(vx1, vx2),
+            top: Math.min(vy1, vy2),
+            width: Math.abs(vx2 - vx1),
+            height: Math.abs(vy2 - vy1),
+        };
+    }
+
+    /** Draw a highlight rectangle */
+    function drawHighlight(ctx, rect, color = "rgba(0,0,0,0.55)") {
+        const pad = Math.max(1, Math.round(rect.height * 0.08));
+        ctx.fillStyle = color;
+        ctx.fillRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
+
+        ctx.strokeStyle = "rgba(200,140,0,0.9)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
+    }
+
+    async function findSpecialLines(page) {
+        const opList = await page.getOperatorList();
+        const results = [];
+
+        let currentTransform = [1, 0, 0, 1, 0, 0];
+        let currentColor = [0,0,0]
+
+        for (let i = 0; i < opList.fnArray.length; i++) {
+            const fn = opList.fnArray[i];
+            const args = opList.argsArray[i];
+
+            switch (fn) {
+                case pdfjsLib.OPS.setStrokeRGBColor:
+                    currentColor = [args[0], args[1], args[2]]
+                    break;
+                case 12: // cm
+                    currentTransform = args;
+                    break;
+
+                case 91: // rest of args
+                    // console.log(args[1])
+                    if (args[1][0] === 0 && args[1][1] === 0 && Math.round(args[1][2]) === 510 && args[1][3] === 0) {
+                        if (currentColor[0] + currentColor[1] + currentColor[2] < 300) break;
+                        // console.log('AA')
+                        // console.log(currentTransform)
+                        results.push({
+                            cm: currentTransform,
+                            moveTo: [0,0],
+                            lineTo: [510.236, 0]
+                        });
+                    }
+                    break;
+            }
+        }
+
+        return results;
+    }
+
+    let questionCounter = 1;
+
+    async function renderPage(pageNumber, pdfCanvas, overlay, ctxOverlay) {
+        removeTextLayers();
+
+        const pdf = await pdfjsLib.getDocument(url).promise;
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale });
+
+        const specialLines = await findSpecialLines(page);
+
+        [pdfCanvas, overlay].forEach(c => {
+            c.width = viewport.width;
+            c.height = viewport.height;
+        });
+
+            // console.log(pageDict[pageNumber])
+        console.log("pdf.js viewport height", viewport.height);
+
+        // Render PDF page
+
+        const ctx = pdfCanvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // Clear overlay
+        ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
+        // for (const i in pageDict[pageNumber]) {
+        //     const line = pageDict[pageNumber][i]
+        //     console.log(line)
+        //     drawHighlight(ctxOverlay, { "left": 0, "top": viewport.height*line, "width": 1000, "height": 0 }, pageNumber, viewport.height)
+        // }
+        // drawHighlight(ctxOverlay, pdfRectToViewportRect({ "left": 0, "top": 827, "width": 620, "height": 0 }, viewport));
+
+
+
+        const textContent = await page.getTextContent();
+
+        // console.log(fontName)
+        if (fontName === '') {
+            for (const item of textContent.items) {
+                const text = (item.str || "").toLowerCase();
+                // console.log(text)
+                if (text.includes("total for question") || text.includes("answer all questions in the spaces provided")) {
+                    fontName = item.fontName;
+                }
+            }
+        }
+
+        for (const item of textContent.items) {
+            const text = (item.str || "").toLowerCase();
+
+            let ffontName = (pageNumber % 2 !== 0 ? `g_d${pageNumber-1}_f${parseInt(fontName.slice(-1))+1}` : `g_d${pageNumber-1}_f${parseInt(fontName.slice(-1))}`);
+
+            if (item.fontName === ffontName) {
+                const cleaned = text.replace(/[* ]/g, "");
+                if (/^-?\d+$/.test(cleaned)) {
+                    if (parseInt(cleaned, 10) === questionCounter) {
+                        questionCounter++;
+
+                        const rect = getTextItemRect(item, viewport, ctxOverlay);
+                        if (rect.left > 50) break;
+                        drawHighlight(ctxOverlay, rect, pageNumber, viewport.height);
+
+                        const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+                        const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+                        pdfRectt.top = rect.top;
+                        drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+                    }
+                }
+            }
+        }
+
+        let counter = 0;
+        console.log(specialLines)
+        for (const specialLine of specialLines) {
+            // if (counter >= questionCounter) break;
+            console.log(specialLine.cm[5])
+            const pdfRect = { "left": 0, "top": specialLine.cm[5], "width": 620, "height": 0 };
+            const rect = pdfRectToViewportRect(pdfRect, viewport);
+            drawHighlight(ctxOverlay, rect, pageNumber, viewport.height);
+            counter++;
+        }
+    }
+
+    async function renderPages() {
+        const pdf = await pdfjsLib.getDocument(url).promise;
+        for (let i = 1; i < pdf.numPages - 7; i++) {
+            // for (let i = 27; i < 28; i++) {
+            const pageWrapper = document.createElement("div");
+            pageWrapper.className = "pageWrapper";
+            const pdfCanvas = document.createElement("canvas");
+            pdfCanvas.id = "pdf-canvas-" + i;
+            pdfCanvas.className = "pdf-canvas";
+            const overlay = document.createElement("canvas");
+            overlay.id = "overlay-" + i;
+            overlay.className = "overlay";
+            const ctxOverlay = overlay.getContext("2d");
+
+            pageWrapper.appendChild(overlay);
+            pageWrapper.appendChild(pdfCanvas);
+            document.getElementById("container").appendChild(pageWrapper);
+
+
+            await renderPage(i+1, pdfCanvas, overlay, ctxOverlay)
+        }
+
+    }
+
+    renderPages().then(() => {
+        console.log(pageSplits)
+    }).catch(err => {
+        console.error(err);
+    });
+</script>
+</body>
+</html>
