@@ -1,16 +1,18 @@
 import fs from "fs/promises";
-import path from "path";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { createCanvas } from "canvas";
+import { createCanvas, Image } from "@napi-rs/canvas";
+GlobalWorkerOptions.workerSrc = "pdfjs-dist/build/pdf.worker.mjs";
+global.Image = Image;
 const canvas = createCanvas(1, 1);
 const ctx = canvas.getContext("2d");
-GlobalWorkerOptions.workerSrc = "pdfjs-dist/build/pdf.worker.mjs";
-// Utility: convert TOP-based fraction to pdf-lib Y coord
+
 function fracFromTopToPdfY(f, height) {
     return height * (1 - f);
 }
+
+
 function getTextItemRect(item, viewport, ctx) {
     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
     const fontHeight = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 12;
@@ -141,7 +143,6 @@ export async function extractPageSplits(pdfPath, srcDoc) {
     return [pageSplits, [minX, maxX]];
 }
 
-// Convert pageSplits into clip ranges
 export function buildClips(pageDict) {
     const clips = [];
     let residual = null;
@@ -173,10 +174,192 @@ export function buildClips(pageDict) {
         }
     }
 
-    // if (residual) console.warn("⚠️ leftover residual", residual);
     return clips;
 }
 
+function findWhiteGaps(canvas, threshold = 250, minGapHeight = 100, marg = 10) {
+    const ctx = canvas.getContext("2d");
+    const { width, height } = canvas;
+    const imageData = ctx.getImageData(0, 0, width, height);
+
+    let whiteRuns = [];
+    let runStart = null;
+
+    for (let y = 0; y < height; y++) {
+        let rowWhite = true;
+        for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4;
+            const r = imageData.data[idx];
+            const g = imageData.data[idx + 1];
+            const b = imageData.data[idx + 2];
+
+            if (r < threshold || g < threshold || b < threshold) {
+                rowWhite = false;
+                break;
+            }
+        }
+
+        if (rowWhite) {
+            if (runStart === null) runStart = y;
+        } else {
+            if (runStart !== null) {
+                if (y - runStart >= minGapHeight) {
+                    whiteRuns.push({ from: runStart + marg, to: y - marg });
+                }
+                runStart = null;
+            }
+        }
+    }
+
+    // last run
+    if (runStart !== null && height - runStart >= minGapHeight) {
+        whiteRuns.push({ from: runStart + marg, to: height - marg });
+    }
+
+    return whiteRuns;
+}
+
+
+// Minimal NodeCanvasFactory for pdfjs rendering (same idea you used)
+class NodeCanvasFactory {
+    create(width, height) {
+        if (width <= 0 || height <= 0) throw new Error("Invalid canvas size");
+        const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
+        const context = canvas.getContext("2d");
+        return { canvas, context };
+    }
+    reset(canvasAndContext, width, height) {
+        canvasAndContext.canvas.width = Math.ceil(width);
+        canvasAndContext.canvas.height = Math.ceil(height);
+    }
+    destroy(canvasAndContext) {
+        // help GC
+        canvasAndContext.context = null;
+        canvasAndContext.canvas = null;
+    }
+}
+
+
+// Helper: render page to node-canvas and return canvas + pdfjs viewport
+async function renderPageToCanvas(pdfPath, pageIndex = 1, scale = 1.0) {
+    const loadingTask = pdfjsLib.getDocument(pdfPath);
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(pageIndex); // 1-based for pdfjs
+    const viewport = page.getViewport({ scale });
+
+    const factory = new NodeCanvasFactory();
+    const { canvas, context } = factory.create(viewport.width, viewport.height);
+
+    await page.render({
+        canvasContext: context,
+        viewport,
+        canvasFactory: factory,
+    }).promise;
+
+    // return canvas and viewport (we need viewport.width/height to convert pixel->pdf points)
+    return { canvas, viewport, page };
+}
+
+
+// Main function: detect white gaps then produce a new PDF with those bands removed
+// inputPath -> outputPath
+export async function removeWhiteBands(inputPath, outputPath, {
+    pageIndex = 1,       // pdf.js 1-based page number to process (default first page)
+    threshold = 250,     // pixel whiteness threshold
+    minGapHeight = 100,  // min vertical gap to consider
+    pdfjsScale = 1.0     // use 1.0 so viewport pixels map directly to PDF points in most cases
+} = {}) {
+    // 1) render once to detect white runs (canvas)
+    const { canvas, viewport, page: pdfjsPage } = await renderPageToCanvas(inputPath, pageIndex, pdfjsScale);
+    const whiteRunsPx = findWhiteGaps(canvas, threshold, minGapHeight);
+    // If no runs -> just copy input to output (nothing to remove)
+    if (!whiteRunsPx.length) {
+        console.log("No white gaps found — copying original file.");
+        await fs.copyFile(inputPath, outputPath);
+        return;
+    }
+
+    // 2) load source with pdf-lib to do vector embedding / clipping
+    const srcBytes = await fs.readFile(inputPath);
+    const srcPdf = await PDFDocument.load(srcBytes);
+    const srcPage = srcPdf.getPage(pageIndex - 1); // pdf-lib 0-based
+    const { width: pdfWidth, height: pdfHeight } = srcPage.getSize();
+
+    // convert pixel ranges (top-origin) to PDF points (bottom-origin)
+    // viewport.height is canvas pixel height; pdf units relate via scaleFactor = viewport.width / pdfWidth
+    const scaleFactor = viewport.width / pdfWidth; // if you used scale=1, scaleFactor is usually 1
+    const whiteRunsPts = whiteRunsPx.map(r => {
+        // r.from/r.to are top-based pixel rows
+        const fromPts = (viewport.height - r.to) / scaleFactor; // bottom-based
+        const toPts   = (viewport.height - r.from) / scaleFactor;
+        return { from: fromPts, to: toPts };
+    });
+
+    // sort and merge overlapping/adjacent white runs (robustness)
+    whiteRunsPts.sort((a,b)=> a.from - b.from);
+    const merged = [];
+    for (const run of whiteRunsPts) {
+        if (!merged.length) merged.push(run);
+        else {
+            const last = merged[merged.length-1];
+            if (run.from <= last.to + 0.01) { // small epsilon
+                last.to = Math.max(last.to, run.to);
+            } else merged.push(run);
+        }
+    }
+
+    // 3) compute kept segments (areas to keep) in bottom-origin pdf points
+    const segments = [];
+    let cur = 0;
+    for (const run of merged) {
+        if (run.from > cur + 0.0001) {
+            segments.push({ from: cur, to: run.from });
+        }
+        cur = Math.max(cur, run.to);
+    }
+    if (cur < pdfHeight - 0.0001) segments.push({ from: cur, to: pdfHeight });
+
+    if (!segments.length) {
+        throw new Error("All content removed by whiteRuns — nothing left.");
+    }
+
+    // 4) create final pdf with each kept segment embedded (vector) and stacked
+    const outPdf = await PDFDocument.create();
+
+    // For this script we create one output page per input page processed:
+    // pageWidth = pdfWidth ; pageHeight = sum(segment heights)
+    const totalHeight = segments.reduce((s, seg) => s + (seg.to - seg.from), 0);
+    const outPage = outPdf.addPage([pdfWidth, totalHeight]);
+
+// Start from top of new page
+    let yCursor = totalHeight;
+
+// Iterate from top-most to bottom-most (reverse order)
+    for (const seg of [...segments].reverse()) {
+        const segHeight = seg.to - seg.from;
+
+        const embedded = await outPdf.embedPage(srcPage, {
+            left: 0,
+            right: pdfWidth,
+            bottom: seg.from,
+            top: seg.to,
+        });
+
+        // move cursor down, then draw segment
+        yCursor -= segHeight;
+        outPage.drawPage(embedded, {
+            x: 0,
+            y: yCursor,
+            width: pdfWidth,
+            height: segHeight,
+        });
+    }
+
+    // 5) save
+    const outBytes = await outPdf.save();
+    await fs.writeFile(outputPath, outBytes);
+    console.log(`Saved trimmed PDF to ${outputPath}`);
+}
 // Use pdf-lib to crop & stitch each clip
 export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
     let { startPage, endPage, startY, endY } = clip;
@@ -250,5 +433,8 @@ export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
 
     const outBytes = await newDoc.save();
     await fs.writeFile(outPath, outBytes);
+
+    await removeWhiteBands(outPath, outPath)
+
     console.log("✅ Saved", outPath);
 }

@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { PDFDocument } from "pdf-lib";
 import { PrismaClient } from "./generated/prisma/index.js";
-import { extractPageSplits, buildClips, stitchClip } from "./utils.js"
+import {extractPageSplits, buildClips, stitchClip, removeWhiteBands} from "./utils.js"
 
 const prisma = new PrismaClient();
 const outDir = "./out";
@@ -64,17 +64,17 @@ async function main() {
         document: 'qp',
             examBoard: 'edexcel',
             subject: 'physics',
-        // paper: 'paper-2',
-        // year: 2017
+        paper: 'paper-2',
+        year: 2017
     }
     const papers = await prisma.examPaper.findMany({
         where
     });
+    // //
+    // // await prisma.examQuestion.deleteMany({
+    // //     where
+    // // })
     //
-    // await prisma.examQuestion.deleteMany({
-    //     where
-    // })
-
     for (const paper of papers) {
         try {
             await processPaper(paper);
@@ -82,8 +82,10 @@ async function main() {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }
     }
+    //
+    // console.log("🎉 All papers processed");
 
-    console.log("🎉 All papers processed");
+    // await removeWhiteBands("./out/edexcel-physics-paper-2-2018-Q19.pdf", "outt.pdf")
 }
 
 main().catch(console.error);

@@ -34,7 +34,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs";
 
-    const url = "papers/edexcel-physics-paper-3-2024-qp.pdf"; // served over http
+    const url = "out/edexcel-physics-paper-2-2018-Q19.pdf"; // served over http
 
     const scale = 1;
 
@@ -90,7 +90,7 @@
         ctx.fillStyle = color;
         ctx.fillRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
 
-        ctx.strokeStyle = "rgba(200,140,0,0.9)";
+        ctx.strokeStyle = "rgba(200,140,0,0.2)";
         ctx.lineWidth = 1;
         ctx.strokeRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
     }
@@ -134,7 +134,47 @@
     }
 
     let questionCounter = 1;
+    function findWhiteGaps(canvas, threshold = 250, minGapHeight = 100) {
+        const ctx = canvas.getContext("2d");
+        const { width, height } = canvas;
+        const imageData = ctx.getImageData(0, 0, width, height);
 
+        let whiteRuns = [];
+        let runStart = null;
+
+        for (let y = 0; y < height; y++) {
+            let rowWhite = true;
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                const r = imageData.data[idx];
+                const g = imageData.data[idx + 1];
+                const b = imageData.data[idx + 2];
+
+                if (r < threshold || g < threshold || b < threshold) {
+                    rowWhite = false;
+                    break;
+                }
+            }
+
+            if (rowWhite) {
+                if (runStart === null) runStart = y;
+            } else {
+                if (runStart !== null) {
+                    if (y - runStart >= minGapHeight) {
+                        whiteRuns.push({ from: runStart, to: y });
+                    }
+                    runStart = null;
+                }
+            }
+        }
+
+        // Handle last run
+        if (runStart !== null && height - runStart >= minGapHeight) {
+            whiteRuns.push({ from: runStart, to: height });
+        }
+
+        return whiteRuns;
+    }
     async function renderPage(pageNumber, pdfCanvas, overlay, ctxOverlay) {
         removeTextLayers();
 
@@ -166,61 +206,69 @@
         // }
         // drawHighlight(ctxOverlay, pdfRectToViewportRect({ "left": 0, "top": 827, "width": 620, "height": 0 }, viewport));
 
+        const gaps = findWhiteGaps(pdfCanvas)
+        console.log(gaps)
+        for (const gap of gaps) {
+            const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+            const rect = pdfRectToViewportRect(pdfRect, viewport);
+            rect.top = gap.from + 40
+            rect.height = gap.to-gap.from - 80;
+            drawHighlight(ctxOverlay, rect);
+        }
 
-
-        const textContent = await page.getTextContent();
+        // const textContent = await page.getTextContent();
 
         // console.log(fontName)
-        if (fontName === '') {
-            for (const item of textContent.items) {
-                const text = (item.str || "").toLowerCase();
-                // console.log(text)
-                if (text.includes("total for question") || text.includes("answer all questions in the spaces provided")) {
-                    fontName = item.fontName;
-                }
-            }
-        }
+        // if (fontName === '') {
+        //     for (const item of textContent.items) {
+        //         const text = (item.str || "").toLowerCase();
+        //         // console.log(text)
+        //         if (text.includes("total for question") || text.includes("answer all questions in the spaces provided")) {
+        //             fontName = item.fontName;
+        //         }
+        //     }
+        // }
 
-        for (const item of textContent.items) {
-            const text = (item.str || "").toLowerCase();
-
-            let ffontName = (pageNumber % 2 !== 0 ? `g_d${pageNumber-1}_f${parseInt(fontName.slice(-1))+1}` : `g_d${pageNumber-1}_f${parseInt(fontName.slice(-1))}`);
-
-            if (item.fontName === ffontName) {
-                const cleaned = text.replace(/[* ]/g, "");
-                if (/^-?\d+$/.test(cleaned)) {
-                    if (parseInt(cleaned, 10) === questionCounter) {
-                        questionCounter++;
-
-                        const rect = getTextItemRect(item, viewport, ctxOverlay);
-                        if (rect.left > 50) break;
-                        drawHighlight(ctxOverlay, rect, pageNumber, viewport.height);
-
-                        const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
-                        const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
-                        pdfRectt.top = rect.top;
-                        drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
-                    }
-                }
-            }
-        }
-
-        let counter = 0;
-        console.log(specialLines)
-        for (const specialLine of specialLines) {
-            // if (counter >= questionCounter) break;
-            console.log(specialLine.cm[5])
-            const pdfRect = { "left": 0, "top": specialLine.cm[5], "width": 620, "height": 0 };
-            const rect = pdfRectToViewportRect(pdfRect, viewport);
-            drawHighlight(ctxOverlay, rect, pageNumber, viewport.height);
-            counter++;
-        }
+        // for (const item of textContent.items) {
+        //     const text = (item.str || "").toLowerCase();
+        //
+        //     let ffontName = (pageNumber % 2 !== 0 ? `g_d${pageNumber-1}_f${parseInt(fontName.slice(-1))+1}` : `g_d${pageNumber-1}_f${parseInt(fontName.slice(-1))}`);
+        //
+        //     if (item.fontName === ffontName) {
+        //         const cleaned = text.replace(/[* ]/g, "");
+        //         if (/^-?\d+$/.test(cleaned)) {
+        //             if (parseInt(cleaned, 10) === questionCounter) {
+        //                 questionCounter++;
+        //
+        //                 const rect = getTextItemRect(item, viewport, ctxOverlay);
+        //                 if (rect.left > 50) break;
+        //                 drawHighlight(ctxOverlay, rect, pageNumber, viewport.height);
+        //
+        //                 const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+        //                 const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+        //                 pdfRectt.top = rect.top;
+        //                 drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+        //             }
+        //         }
+        //     }
+        // }
+        //
+        // let counter = 0;
+        // console.log(specialLines)
+        // for (const specialLine of specialLines) {
+        //     // if (counter >= questionCounter) break;
+        //     console.log(specialLine.cm[5])
+        //     const pdfRect = { "left": 0, "top": specialLine.cm[5], "width": 620, "height": 0 };
+        //     const rect = pdfRectToViewportRect(pdfRect, viewport);
+        //     drawHighlight(ctxOverlay, rect, pageNumber, viewport.height);
+        //     counter++;
+        // }
     }
 
     async function renderPages() {
         const pdf = await pdfjsLib.getDocument(url).promise;
-        for (let i = 1; i < pdf.numPages - 7; i++) {
-            // for (let i = 27; i < 28; i++) {
+        // for (let i = 0; i < pdf.numPages - 7; i++) {
+            for (let i = 0; i < 1; i++) {
             const pageWrapper = document.createElement("div");
             pageWrapper.className = "pageWrapper";
             const pdfCanvas = document.createElement("canvas");
