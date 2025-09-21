@@ -64,16 +64,16 @@ async function main() {
         document: 'qp',
             examBoard: 'edexcel',
             subject: 'physics',
-        // paper: 'paper-1',
+        // paper: 'paper-2',
         // year: 2017
     }
     const papers = await prisma.examPaper.findMany({
         where
     });
-
-    await prisma.examQuestion.deleteMany({
-        where
-    })
+    //
+    // await prisma.examQuestion.deleteMany({
+    //     where
+    // })
 
     for (const paper of papers) {
         try {

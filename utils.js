@@ -194,20 +194,21 @@ export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
         let top, bottom;
 
         const minX = minXp * width + (srcPage.getSize().width - srcPage.getCropBox().width )/2
-        const maxX = (maxXp-.1) * width + (srcPage.getSize().width - srcPage.getCropBox().width )/2
+        const maxX = (maxXp-.07) * width + (srcPage.getSize().width - srcPage.getCropBox().width )/2
+        const epsilon = (srcPage.getSize().height - srcPage.getCropBox().height)/2;
 
         if (startPage === endPage) {
             top = fracFromTopToPdfY(startY, height);
             bottom = fracFromTopToPdfY(endY, height);
         } else if (p === startPage) {
             top = fracFromTopToPdfY(startY, height);
-            bottom = 100;
+            bottom = 100 + epsilon;
         } else if (p === endPage) {
-            top = height - 20;
+            top = height - 20 - 20 + epsilon;
             bottom = fracFromTopToPdfY(endY, height);
         } else {
-            top = height - 20;
-            bottom = 100;
+            top = height - 20 - 20 + epsilon;
+            bottom = 100 + epsilon;
         }
 
         top = Math.min(Math.max(top, 0), height);

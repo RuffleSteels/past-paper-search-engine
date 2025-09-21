@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>PDF Search</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <h1>PDF Search Engine</h1>
+        <label for="search">
+        </label>
+        <input oninput="search()" value="frequencies" type="text" id="search" placeholder="Search PDFs">
+        <div id="results"></div>
+        <link rel="stylesheet"
+              href="https://unpkg.com/pdfjs-dist@2.16.105/web/pdf_viewer.css" />
+
+        <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.js"></script>
+        <script>
+            // the global object lives under window; expose it to a variable
+            const pdfjsLib = window['pdfjs-dist/build/pdf'];
+
+            // worker
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+
+
+        </script>
+        <script src="index.js"></script>
+
+    </body>
+</html>

@@ -1,0 +1,44 @@
+#container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+.pageWrapper {
+    position: relative;
+}
+.questionContainer {
+    position: relative;
+}
+.pdf-canvas {
+    display: block;
+}
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+}
+#results {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    top: 0;
+    left: 0;
+}
+body { font-family: system-ui, Arial; padding: 18px; }
+#controls { margin-bottom: 12px; }
+#pdf-container { display: flex; flex-direction: column; gap: 18px; }
+
+.pdf-page { position: relative; /* wrapper */ }
+canvas { display: block; }
+/* textLayer must be absolutely positioned and same CSS size as canvas */
+.textLayer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* allow text selection and pointer events */
+    pointer-events: auto;
+    user-select: text;
+}
+/* spans are created by pdf.js; keep whitespace */
+.textLayer span { white-space: pre; }
