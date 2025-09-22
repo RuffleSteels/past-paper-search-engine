@@ -31,8 +31,7 @@ app.get('/api/search', async (req, res) => {
     });
     const pdfNames = results.map(item => {
         const fullPath = item.question.path;
-        item.question.path = fullPath.split(`\\`).pop()
-        // console.log(fullPath.split('\').pop())
+        item.question.path = fullPath.split(`/`).pop()
         return item.question;
     });
 

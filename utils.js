@@ -333,6 +333,47 @@ export async function removeWhiteBands(inputPath, outputPath, {
     console.log(`Saved vector PDF with ${segments.length} cropped pages to ${outputPath}`);
 }
 
+export async function stackPdfVertically(inputPath, outputPath) {
+    // Load input
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+
+    // Get all pages
+    const pages = pdfDoc.getPages();
+    const widths = pages.map(p => p.getWidth());
+    const heights = pages.map(p => p.getHeight());
+
+    // New PDF
+    const newPdf = await PDFDocument.create();
+
+    // Total height = sum of page heights
+    const totalHeight = heights.reduce((a, b) => a + b, 0);
+    const maxWidth = Math.max(...widths);
+
+    // Create one tall page
+    const stackedPage = newPdf.addPage([maxWidth, totalHeight]);
+
+    // Import original pages into new PDF
+    const embeddedPages = await newPdf.embedPdf(pdfBytes, pages.map((_, i) => i));
+
+    // Draw them one by one, from top to bottom
+    let currentY = totalHeight;
+    for (let i = 0; i < embeddedPages.length; i++) {
+        const embedded = embeddedPages[i];
+        const { width, height } = embedded;
+        currentY -= height; // move down
+        stackedPage.drawPage(embedded, {
+            x: 0,
+            y: currentY,
+            width,
+            height,
+        });
+    }
+
+    // Save to file
+    const newPdfBytes = await newPdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+}
 // Use pdf-lib to crop & stitch each clip
 export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
     let { startPage, endPage, startY, endY } = clip;
@@ -409,7 +450,7 @@ export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
 
     await removeWhiteBands(outPath, outPath)
 
-    await mergeCroppedPages(outPath, outPath)
+    // await stackPdfVertically(outPath, outPath);
 
     console.log("✅ Saved", outPath);
 }

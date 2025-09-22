@@ -9,6 +9,9 @@
 .questionContainer {
     position: relative;
 }
+.page {
+    position: relative;
+}
 .pdf-canvas {
     display: block;
 }

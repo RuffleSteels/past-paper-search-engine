@@ -201,42 +201,48 @@ function highlightWordInTextLayer(word, container) {
     });
 }
 async function renderQuestion(data, query, q) {
-    const { path, examBoard, paper, subject, year, question } = data
+    const { path, examBoard, paper, subject, year, question } = data;
     const pdf = await pdfjsLib.getDocument('question/' + path).promise;
-    pdfDocument = pdf
+    pdfDocument = pdf;
 
     const wrapper = document.createElement("div");
-    wrapper.className = "questionWrapper"
+    wrapper.className = "questionWrapper";
 
     wrapper.innerHTML = `
-        <div class="questionTitle">
-            <h4>
-            ${year} ${paper} Q${question}
-            </h4>
-        </div>
-    `
+    <div class="questionTitle">
+        <h4>
+        ${year} ${paper} Q${question}
+        </h4>
+    </div>
+`;
 
     const viewer = document.createElement("div");
-    viewer.className = "questionContainer"
-    viewer.id = "question"+q
+    viewer.className = "questionContainer";
+    viewer.id = "question" + q;
 
-    document.getElementById('results').appendChild(wrapper)
-    for (let i = 0; i < pdf.numPages; i++) {
-        const page = createEmptyPage(i + 1);
+    document.getElementById("results").appendChild(wrapper);
+
+// Create and load all pages
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = createEmptyPage(i);
         viewer.appendChild(page);
+
+        loadPage(i, viewer, query).then((pdfPage) => {
+            if (i === 1) {
+                // Only need to set these once (based on the first page)
+                const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
+                PAGE_HEIGHT = viewport.height;
+                document.body.style.width = `${viewport.width}px`;
+            }
+
+            // Highlight after rendering
+            setTimeout(() => {
+                highlightWordInTextLayer(query, page.querySelector(".textLayer"));
+            }, 10);
+        });
     }
 
     wrapper.appendChild(viewer);
-
-    loadPage(1,viewer, query).then((pdfPage) => {
-        const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
-        PAGE_HEIGHT = viewport.height;
-        document.body.style.width = `${viewport.width}px`;
-        setTimeout(() => {
-            highlightWordInTextLayer(query, viewer.querySelector(".textLayer"));
-        },10)
-
-    });
 }
 
 async function search() {
