@@ -170,9 +170,14 @@ function loadPage(pageNum,viewer, query) {
         return renderTask.promise.then(() => pdfPage);
     });
 }
-function highlightWordInTextLayer(word, container) {
-    if (!word) return;
-    const regex = new RegExp(`(${word})`, "gi");
+function highlightWordInTextLayer(word, container, beforeHeight, path) {
+    if (!word) return -1;
+
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "gi");
+
+    let firstMatchNode = null;
+
     container.querySelectorAll("span").forEach((node) => {
         if (node.childNodes.length === 1 && node.firstChild.nodeType === Node.TEXT_NODE) {
             const text = node.textContent;
@@ -180,18 +185,23 @@ function highlightWordInTextLayer(word, container) {
                 const frag = document.createDocumentFragment();
                 let lastIndex = 0;
                 text.replace(regex, (match, p1, offset) => {
-                    // normal text before the match
                     if (offset > lastIndex) {
                         frag.appendChild(document.createTextNode(text.slice(lastIndex, offset)));
                     }
-                    // highlighted match
                     const mark = document.createElement("span");
                     mark.className = "highlight";
                     mark.textContent = match;
                     frag.appendChild(mark);
+
+                    console.log("Created mark:", mark.textContent);
+
+
+                    if (!firstMatchNode) {
+                        firstMatchNode = mark;
+                    }
+
                     lastIndex = offset + match.length;
                 });
-                // leftover text after last match
                 if (lastIndex < text.length) {
                     frag.appendChild(document.createTextNode(text.slice(lastIndex)));
                 }
@@ -199,6 +209,18 @@ function highlightWordInTextLayer(word, container) {
             }
         }
     });
+
+    console.log(firstMatchNode)
+
+    if (firstMatchNode) {
+        const matchRect = firstMatchNode.getBoundingClientRect();
+
+        const containerRect = container.getBoundingClientRect();
+        console.log(matchRect, containerRect, beforeHeight);
+        return beforeHeight + (matchRect.top - containerRect.top)
+    }
+
+    return -1;
 }
 async function renderQuestion(data, query, q) {
     const { path, examBoard, paper, subject, year, question } = data;
@@ -223,46 +245,91 @@ async function renderQuestion(data, query, q) {
     document.getElementById("results").appendChild(wrapper);
 
 // Create and load all pages
+    let heightBefore = 0;
+    let currPageHeight = 0
+    let scrollH = -1;
+    wrapper.appendChild(viewer);
     for (let i = 1; i <= pdf.numPages; i++) {
+        console.log(i)
         const page = createEmptyPage(i);
         viewer.appendChild(page);
 
-        loadPage(i, viewer, query).then((pdfPage) => {
+        const pdfPage = await loadPage(i, viewer, query)
+
+            const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
+            PAGE_HEIGHT = viewport.height;
+            currPageHeight = PAGE_HEIGHT
             if (i === 1) {
-                // Only need to set these once (based on the first page)
-                const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
-                PAGE_HEIGHT = viewport.height;
                 document.body.style.width = `${viewport.width}px`;
             }
 
-            // Highlight after rendering
-            setTimeout(() => {
-                highlightWordInTextLayer(query, page.querySelector(".textLayer"));
-            }, 10);
-        });
+            heightBefore += PAGE_HEIGHT
+
+
+        await sleep(10);
+
+        if (scrollH < 0) {
+            scrollH = await highlightWordInTextLayer(
+                query,
+                page.querySelector(".textLayer"),
+                heightBefore - PAGE_HEIGHT,
+                path
+            );
+            wrapper.scrollTop = scrollH;
+        }
+
+
+
     }
 
-    wrapper.appendChild(viewer);
+
+}
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+let controller;       // for aborting fetch
+let debounceTimer;    // for debouncing
+let currentSearchId = 0;
+function debouncedSearch() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(search, 300); // wait 500ms after last keystroke
 }
 
 async function search() {
-    const query = document.getElementById('search').value;
-    if (query === "") return;
-    const encodedQuery = encodeURIComponent(query);
-
-    const res = await fetch(`/api/search?q=${encodedQuery}`);
-    const data = await res.json();
-
-    if (data.success && data.data.length > 0) {
+    const query = document.getElementById('search').value.trim();
+    if (!query) {
         document.getElementById('results').innerHTML = '';
-        for (let i = 0; i < data.data.length; i++) {
-            if (i>=10) break;
-            await renderQuestion(data.data[i], query, i)
+        return;
+    }
+
+    if (controller) {
+        controller.abort();
+    }
+    controller = new AbortController();
+    const signal = controller.signal;
+    const searchId = ++currentSearchId;
+
+    try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal });
+        const data = await res.json();
+
+        if (searchId !== currentSearchId) return;
+        document.getElementById('results').innerHTML = '';
+        if (data.success && data.data.length > 0) {
+
+            for (let i = 0; i < data.data.length && i < 10; i++) {
+                if (searchId !== currentSearchId) {
+                    document.getElementById('results').innerHTML = '';
+                    return;
+                }
+                await renderQuestion(data.data[i], query, i);
+            }
         }
-
-    } else {
-        document.getElementById('results').innerHTML = '';
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            return;
+        }
+        console.error('Search error:', err);
     }
 }
-
 search();

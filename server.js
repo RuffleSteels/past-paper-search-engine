@@ -31,11 +31,9 @@ app.get('/api/search', async (req, res) => {
     });
     const pdfNames = results.map(item => {
         const fullPath = item.question.path;
-        item.question.path = fullPath.split(`/`).pop()
+        item.question.path = fullPath.split(`\\`).pop()
         return item.question;
     });
-
-    console.log(pdfNames);
 
     res.json({success: true, data: pdfNames});
 });

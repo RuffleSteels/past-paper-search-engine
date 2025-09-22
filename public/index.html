@@ -9,7 +9,7 @@
         <h1>PDF Search Engine</h1>
         <label for="search">
         </label>
-        <input oninput="search()" value="frequencies" type="text" id="search" placeholder="Search PDFs">
+        <input oninput="debouncedSearch()" value="frequencies" type="text" id="search" placeholder="Search PDFs">
         <div id="results"></div>
         <link rel="stylesheet"
               href="https://unpkg.com/pdfjs-dist@2.16.105/web/pdf_viewer.css" />
