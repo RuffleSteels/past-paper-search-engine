@@ -261,105 +261,78 @@ async function renderPageToCanvas(pdfPath, pageIndex = 1, scale = 1.0) {
 }
 
 
-// Main function: detect white gaps then produce a new PDF with those bands removed
-// inputPath -> outputPath
+
+
 export async function removeWhiteBands(inputPath, outputPath, {
-    pageIndex = 1,       // pdf.js 1-based page number to process (default first page)
-    threshold = 250,     // pixel whiteness threshold
-    minGapHeight = 100,  // min vertical gap to consider
-    pdfjsScale = 1.0     // use 1.0 so viewport pixels map directly to PDF points in most cases
+    pageIndex = 1,
+    threshold = 250,
+    minGapHeight = 100,
+    pdfjsScale = 1.0
 } = {}) {
-    // 1) render once to detect white runs (canvas)
-    const { canvas, viewport, page: pdfjsPage } = await renderPageToCanvas(inputPath, pageIndex, pdfjsScale);
+    // detect gaps
+    const { canvas, viewport } = await renderPageToCanvas(inputPath, pageIndex, pdfjsScale);
     const whiteRunsPx = findWhiteGaps(canvas, threshold, minGapHeight);
-    // If no runs -> just copy input to output (nothing to remove)
+
     if (!whiteRunsPx.length) {
-        console.log("No white gaps found — copying original file.");
         await fs.copyFile(inputPath, outputPath);
         return;
     }
 
-    // 2) load source with pdf-lib to do vector embedding / clipping
     const srcBytes = await fs.readFile(inputPath);
     const srcPdf = await PDFDocument.load(srcBytes);
-    const srcPage = srcPdf.getPage(pageIndex - 1); // pdf-lib 0-based
+    const srcPage = srcPdf.getPage(pageIndex - 1);
     const { width: pdfWidth, height: pdfHeight } = srcPage.getSize();
 
-    // convert pixel ranges (top-origin) to PDF points (bottom-origin)
-    // viewport.height is canvas pixel height; pdf units relate via scaleFactor = viewport.width / pdfWidth
-    const scaleFactor = viewport.width / pdfWidth; // if you used scale=1, scaleFactor is usually 1
+    const scaleFactor = viewport.width / pdfWidth;
+
+    // pixel → points
     const whiteRunsPts = whiteRunsPx.map(r => {
-        // r.from/r.to are top-based pixel rows
-        const fromPts = (viewport.height - r.to) / scaleFactor; // bottom-based
+        const fromPts = (viewport.height - r.to) / scaleFactor;
         const toPts   = (viewport.height - r.from) / scaleFactor;
         return { from: fromPts, to: toPts };
     });
 
-    // sort and merge overlapping/adjacent white runs (robustness)
+    // merge
     whiteRunsPts.sort((a,b)=> a.from - b.from);
     const merged = [];
     for (const run of whiteRunsPts) {
         if (!merged.length) merged.push(run);
         else {
             const last = merged[merged.length-1];
-            if (run.from <= last.to + 0.01) { // small epsilon
-                last.to = Math.max(last.to, run.to);
-            } else merged.push(run);
+            if (run.from <= last.to + 0.01) last.to = Math.max(last.to, run.to);
+            else merged.push(run);
         }
     }
 
-    // 3) compute kept segments (areas to keep) in bottom-origin pdf points
+    // kept
     const segments = [];
     let cur = 0;
     for (const run of merged) {
-        if (run.from > cur + 0.0001) {
-            segments.push({ from: cur, to: run.from });
-        }
+        if (run.from > cur + 0.0001) segments.push({ from: cur, to: run.from });
         cur = Math.max(cur, run.to);
     }
     if (cur < pdfHeight - 0.0001) segments.push({ from: cur, to: pdfHeight });
 
-    if (!segments.length) {
-        throw new Error("All content removed by whiteRuns — nothing left.");
-    }
+    if (!segments.length) throw new Error("All content removed.");
 
-    // 4) create final pdf with each kept segment embedded (vector) and stacked
+    // output
     const outPdf = await PDFDocument.create();
 
-    // For this script we create one output page per input page processed:
-    // pageWidth = pdfWidth ; pageHeight = sum(segment heights)
-    const totalHeight = segments.reduce((s, seg) => s + (seg.to - seg.from), 0);
-    const outPage = outPdf.addPage([pdfWidth, totalHeight]);
-
-// Start from top of new page
-    let yCursor = totalHeight;
-
-// Iterate from top-most to bottom-most (reverse order)
-    for (const seg of [...segments].reverse()) {
+    for (const seg of segments.reverse()) {
         const segHeight = seg.to - seg.from;
 
-        const embedded = await outPdf.embedPage(srcPage, {
-            left: 0,
-            right: pdfWidth,
-            bottom: seg.from,
-            top: seg.to,
-        });
-
-        // move cursor down, then draw segment
-        yCursor -= segHeight;
-        outPage.drawPage(embedded, {
-            x: 0,
-            y: yCursor,
-            width: pdfWidth,
-            height: segHeight,
-        });
+        // copy source page
+        const [copy] = await outPdf.copyPages(srcPdf, [pageIndex - 1]);
+        // crop box is bottom-left origin
+        copy.setCropBox(0, seg.from, pdfWidth, segHeight);
+        outPdf.addPage(copy);
     }
 
-    // 5) save
     const outBytes = await outPdf.save();
     await fs.writeFile(outputPath, outBytes);
-    console.log(`Saved trimmed PDF to ${outputPath}`);
+    console.log(`Saved vector PDF with ${segments.length} cropped pages to ${outputPath}`);
 }
+
 // Use pdf-lib to crop & stitch each clip
 export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
     let { startPage, endPage, startY, endY } = clip;
@@ -435,6 +408,8 @@ export async function stitchClip(srcDoc, clip, outPath, minXp, maxXp) {
     await fs.writeFile(outPath, outBytes);
 
     await removeWhiteBands(outPath, outPath)
+
+    await mergeCroppedPages(outPath, outPath)
 
     console.log("✅ Saved", outPath);
 }
