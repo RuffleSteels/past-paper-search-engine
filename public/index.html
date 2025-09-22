@@ -2,15 +2,69 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>PDF Search</title>
+        <title>A-Level Edexcel Physics Question Searcher</title>
         <link rel="stylesheet" href="style.css">
     </head>
     <body>
-        <h1>PDF Search Engine</h1>
-        <label for="search">
-        </label>
-        <input oninput="debouncedSearch()" value="frequencies" type="text" id="search" placeholder="Search PDFs">
-        <div id="results"></div>
+    <div class="main">
+        <div class='gradientContainer'>
+
+        </div>
+        <div class='gradientContainer second'>
+
+        </div>
+
+        <main class='mainContainer'>
+            <div class='mainBox'>
+                <h1>A-Level Edexcel Physics Question Searcher</h1>
+                <label for="search">
+                </label>
+                <input oninput="debouncedSearch()" value="" type="text" id="search" placeholder="Search PDFs">
+                <h5 id="noResults" class="headerText">
+                    No Results Found
+                </h5>
+                <div id="results">
+
+                </div>
+                <div class='pageNav'>
+                    <svg
+                            class="prevPage"
+                            onclick="prevPage()"
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <path
+                                d="M16.2426 6.34317L14.8284 4.92896L7.75739 12L14.8285 19.0711L16.2427 17.6569L10.5858 12L16.2426 6.34317Z"
+                                fill="currentColor"
+                        />
+                    </svg>
+                    <h6>
+                        Page <span id="curPage">1</span> of <span id="pageNum">1</span>
+                    </h6>
+                    <svg
+                            class="nextPage"
+                            onclick="nextPage()"
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <path
+                                d="M10.5858 6.34317L12 4.92896L19.0711 12L12 19.0711L10.5858 17.6569L16.2427 12L10.5858 6.34317Z"
+                                fill="currentColor"
+                        />
+                    </svg>
+                </div>
+            </div>
+
+        </main>
+
+    </div>
+
         <link rel="stylesheet"
               href="https://unpkg.com/pdfjs-dist@2.16.105/web/pdf_viewer.css" />
 

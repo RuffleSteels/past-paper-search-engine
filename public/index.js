@@ -133,20 +133,21 @@ function loadPage(pageNum,viewer, query) {
         const wrapper = page.querySelector(".canvasWrapper");
         const container = page.querySelector(".textLayer");
         const canvasContext = canvas.getContext("2d");
-        const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
-
+        const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+        const scale = viewer.clientWidth / unscaledViewport.width;
+        const viewport = pdfPage.getViewport({ scale });
         const outputScale = window.devicePixelRatio || 1;
         canvas.width = viewport.width * outputScale;
         canvas.height = viewport.height * outputScale;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        canvas.style.width = "100%";
+        canvas.style.height = "auto";
 
-        page.style.width = `${viewport.width}px`;
-        page.style.height = `${viewport.height}px`;
-        wrapper.style.width = `${viewport.width}px`;
-        wrapper.style.height = `${viewport.height}px`;
-        container.style.width = `${viewport.width}px`;
-        container.style.height = `${viewport.height}px`;
+        page.style.width = "100%";
+        page.style.height = "auto";
+        wrapper.style.width = "100%";
+        wrapper.style.height = "auto";
+        container.style.width = "100%";
+        container.style.height = "auto";
 
         // Render PDF page into canvas
         const renderTask = pdfPage.render({
@@ -170,7 +171,7 @@ function loadPage(pageNum,viewer, query) {
         return renderTask.promise.then(() => pdfPage);
     });
 }
-function highlightWordInTextLayer(word, container, beforeHeight, path) {
+function highlightWordInTextLayer(word, container, viewer, path) {
     if (!word) return -1;
 
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -193,9 +194,6 @@ function highlightWordInTextLayer(word, container, beforeHeight, path) {
                     mark.textContent = match;
                     frag.appendChild(mark);
 
-                    console.log("Created mark:", mark.textContent);
-
-
                     if (!firstMatchNode) {
                         firstMatchNode = mark;
                     }
@@ -210,21 +208,21 @@ function highlightWordInTextLayer(word, container, beforeHeight, path) {
         }
     });
 
-    console.log(firstMatchNode)
-
     if (firstMatchNode) {
         const matchRect = firstMatchNode.getBoundingClientRect();
-
-        const containerRect = container.getBoundingClientRect();
-        console.log(matchRect, containerRect, beforeHeight);
-        return beforeHeight + (matchRect.top - containerRect.top)
+        const viewerRect = container.closest(".questionContainer").getBoundingClientRect();
+        return matchRect.top - viewerRect.top + viewer.scrollTop;
     }
 
     return -1;
 }
+function fullSize(e) {
+    const container = e.parentNode.parentNode
+    container.classList.toggle("fullSize")
+}
 async function renderQuestion(data, query, q) {
     const { path, examBoard, paper, subject, year, question } = data;
-    const pdf = await pdfjsLib.getDocument('question/' + path).promise;
+    const pdf = await pdfjsLib.getDocument('preview/' + path).promise;
     pdfDocument = pdf;
 
     const wrapper = document.createElement("div");
@@ -232,16 +230,72 @@ async function renderQuestion(data, query, q) {
 
     wrapper.innerHTML = `
     <div class="questionTitle">
-        <h4>
+        <h4 class="subheader">
         ${year} ${paper} Q${question}
         </h4>
+        <a href="${'question/' + path}" target="_blank" rel="noopener noreferrer">
+        <svg
+        class="externalButton"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <path
+    d="M15.6396 7.02527H12.0181V5.02527H19.0181V12.0253H17.0181V8.47528L12.1042 13.3892L10.6899 11.975L15.6396 7.02527Z"
+    fill="currentColor"
+  />
+  <path
+    d="M10.9819 6.97473H4.98193V18.9747H16.9819V12.9747H14.9819V16.9747H6.98193V8.97473H10.9819V6.97473Z"
+    fill="currentColor"
+  />
+</svg>
+</a>
+        
+        <svg
+        onclick="fullSize(this)"
+  width="24"
+  class="minimiseButton"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <path
+    d="M7.97867 9.45703L4.40883 9.45423L4.40726 11.4542L11.4073 11.4597L11.4127 4.45972L9.41274 4.45815L9.40992 8.05978L3.09616 1.76935L1.68457 3.18618L7.97867 9.45703Z"
+    fill="currentColor"
+  />
+  <path
+    d="M19.5615 14.5521L19.5535 12.5521L12.5536 12.58L12.5814 19.5799L14.5814 19.572L14.5671 15.9706L20.9105 22.2307L22.3153 20.8071L15.9914 14.5663L19.5615 14.5521Z"
+    fill="currentColor"
+  />
+</svg>
+        <svg
+        onclick="fullSize(this)"
+        class="maximiseButton"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <path
+    d="M10.1005 4.10052V2.10052H2.10046L2.10046 10.1005H4.10046L4.10046 5.51471L9.87875 11.293L11.293 9.87878L5.51471 4.10052H10.1005Z"
+    fill="currentColor"
+  />
+  <path
+    d="M19.8995 13.8995H21.8995V21.8995H13.8995V19.8995H18.4853L12.7071 14.1212L14.1213 12.707L19.8995 18.4853V13.8995Z"
+    fill="currentColor"
+  />
+</svg>
     </div>
 `;
 
     const viewer = document.createElement("div");
     viewer.className = "questionContainer";
     viewer.id = "question" + q;
-
+    wrapper.style.opacity = "0";
     document.getElementById("results").appendChild(wrapper);
 
 // Create and load all pages
@@ -250,7 +304,6 @@ async function renderQuestion(data, query, q) {
     let scrollH = -1;
     wrapper.appendChild(viewer);
     for (let i = 1; i <= pdf.numPages; i++) {
-        console.log(i)
         const page = createEmptyPage(i);
         viewer.appendChild(page);
 
@@ -259,24 +312,30 @@ async function renderQuestion(data, query, q) {
             const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
             PAGE_HEIGHT = viewport.height;
             currPageHeight = PAGE_HEIGHT
-            if (i === 1) {
-                document.body.style.width = `${viewport.width}px`;
-            }
+
 
             heightBefore += PAGE_HEIGHT
 
 
         await sleep(10);
 
+            if (stop) return
+
         if (scrollH < 0) {
             scrollH = await highlightWordInTextLayer(
                 query,
                 page.querySelector(".textLayer"),
-                heightBefore - PAGE_HEIGHT,
+                viewer,
                 path
             );
-            wrapper.scrollTop = scrollH;
+            viewer.scrollTop = scrollH;
+            setTimeout(() => {
+                if (stop) return
+                wrapper.style.opacity = '1'
+            }, 500);
+
         }
+
 
 
 
@@ -286,44 +345,75 @@ async function renderQuestion(data, query, q) {
 }
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-let controller;       // for aborting fetch
+}let controller;       // for aborting fetch
 let debounceTimer;    // for debouncing
 let currentSearchId = 0;
+let stop = false;
 function debouncedSearch() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(search, 300); // wait 500ms after last keystroke
+    debounceTimer = setTimeout(search, 300);
 }
 
-async function search() {
+let initial = true;
+let pageNum = 1;
+let maxPages = 1;
+
+async function search(input = true, page = 1) {
     const query = document.getElementById('search').value.trim();
-    if (!query) {
+
+    // ✅ Clear immediately if empty
+    if (query === '') {
+        stop = true;  // <-- set stop
+        if (controller) controller.abort();
+        pageNum = 1
+        maxPages = 1
+        checkNav()
         document.getElementById('results').innerHTML = '';
+        document.querySelector('#noResults').style.display = 'none';
         return;
     }
 
-    if (controller) {
-        controller.abort();
-    }
+    // reset stop flag since we have a query now
+    stop = false;
+
+    // ✅ Abort any previous search
+    if (controller) controller.abort();
     controller = new AbortController();
     const signal = controller.signal;
+
     const searchId = ++currentSearchId;
 
     try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal });
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}`, { signal });
         const data = await res.json();
 
+        // ✅ Ignore outdated responses
         if (searchId !== currentSearchId) return;
+
+        // Clear results before showing new ones
         document.getElementById('results').innerHTML = '';
+
         if (data.success && data.data.length > 0) {
+            if (input) {
+                pageNum = 1;
+                maxPages = data?.totalPages || 1;
+                checkNav();
+                document.querySelector('#curPage').innerHTML = 1;
+                initial = false;
+                document.querySelector("#pageNum").innerHTML = data?.totalPages || 1;
+            }
+
+            document.querySelector('#noResults').style.display = 'none';
 
             for (let i = 0; i < data.data.length && i < 10; i++) {
-                if (searchId !== currentSearchId) {
+                if (searchId !== currentSearchId || stop) {
                     document.getElementById('results').innerHTML = '';
                     return;
                 }
                 await renderQuestion(data.data[i], query, i);
             }
+        } else {
+            document.querySelector('#noResults').style.display = 'block';
         }
     } catch (err) {
         if (err.name === 'AbortError') {
@@ -332,4 +422,36 @@ async function search() {
         console.error('Search error:', err);
     }
 }
-search();
+// search();
+
+function checkNav() {
+    console.log(pageNum - 1)
+    if (pageNum - 1 < 1) {
+        document.querySelector('.prevPage').classList.add('greyed');
+    } else {
+        document.querySelector('.prevPage').classList.remove('greyed');
+    }
+
+    if (pageNum + 1 > maxPages) {
+        document.querySelector('.nextPage').classList.add('greyed');
+    } else {
+        document.querySelector('.nextPage').classList.remove('greyed');
+    }
+}
+function prevPage() {
+    if (pageNum - 1 < 1) return;
+    pageNum--;
+    checkNav()
+
+    document.querySelector('#curPage').innerHTML = pageNum;
+    search(false,pageNum)
+}
+
+function nextPage() {
+    if (pageNum + 1 > maxPages) return;
+
+    pageNum += 1;
+    checkNav()
+    document.querySelector('#curPage').innerHTML = pageNum;
+    search(false,pageNum);
+}

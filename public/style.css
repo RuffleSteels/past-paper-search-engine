@@ -1,19 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,200;0,300;0,400;0,600;1,200;1,300;1,400;1,600&display=swap');
 #container {
     position: relative;
     display: flex;
     flex-direction: column;
 }
+.textLayer span.highlight {
+    position: relative;
+}
+.questionTitle svg {
+    cursor: pointer;
+}
+.questionTitle .subheader {
+    flex-grow: 1;
+    margin: 0;
+    padding: 0;
+}
+.questionTitle {
+    gap: 16px;
+    width: 100%;
+    padding: 8px 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+.main {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 100vh;
+    align-items: start;
+    justify-content: start;
+}
+.mainBox {
+    padding: 0 120px;
+}
+.mainContainer {
+
+    width: 100vw;
+}
+
+.gradientContainer {
+    z-index: -3;
+    position: absolute;
+    top: 0;
+    pointer-events: none;
+    left: 0;
+    width: 100%;
+    height: max(120vh, 800px);
+    background: radial-gradient(76.37% 100% at 94.39% 1.72%, #1A191D 0%, transparent 100%);
+}
+
+
+.gradientContainer.second {
+    top: unset;
+    bottom: 0;
+    background: radial-gradient(130.09% 93.1% at 107.81% -3.3%, #1A191D 0%,  transparent 100%);
+    transform: rotate(180deg);
+}
+
+.externalButton {
+    color: white;
+    cursor: pointer;
+}
+
 .questionWrapper {
-    height: 300px;
-    width: fit-content;
-    overflow: scroll;
+    transition: opacity .3s;
+    flex-direction: column;
+    display: inline-block; /* important: allows breaking into columns */
+    width: 100%;           /* fill the column width */
+    margin-bottom: 32px;
 }
 .pageWrapper {
     position: relative;
 }
+.maximiseButton {
+    display: block;
+}
+.minimiseButton {
+    display: none;
+}
+.nextPage, .prevPage {
+    cursor: pointer;
+    height: 32px;
+    width: 32px;
+}
+.greyed {
+    opacity: .3;
+    cursor: default;
+}
+.pageNav {
+    display: flex;
+    flex-direction: row;
+    justify-content: start;
+    align-items: center;
+    font-size: 24px;
+}
+.nextPage {
+
+}
+.prevPage {
+
+}
+.questionWrapper.fullSize .minimiseButton {
+    display: block;
+}
+.questionWrapper.fullSize .maximiseButton {
+    display: none;
+}
+.questionWrapper.fullSize .questionContainer {
+    max-height: auto;
+}
+.mainBox .headerText {
+    font-size: 32px
+}
+#noResults{
+    display: none;
+}
 .questionContainer {
-    width: fit-content;
+    max-height: 300px;
+    width: 100%;
+    overflow: scroll;
     position: relative;
+    border-radius: 5px;
 }
 .page {
     position: relative;
@@ -29,26 +138,35 @@
 }
 #results {
     position: relative;
-    display: flex;
-    flex-direction: column;
+    /*display: grid;*/
+    /*grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));*/
     top: 0;
+    column-width: 500px;   /* minimum column width */
     height: fit-content;
+    column-gap: 32px;
     left: 0;
+    width: 100%;
+    margin-bottom: 100px;
 }
-body { font-family: system-ui, Arial; padding: 18px; }
-#controls { margin-bottom: 12px; }
-#pdf-container { display: flex; flex-direction: column; gap: 18px; }
+body {
+    background: #757183;
+    font-family: "Poppins", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    margin: 0;
+    color: white;
+    box-sizing: border-box;
 
-.pdf-page { position: relative; /* wrapper */ }
+    width: 100vw;
+}
+
 canvas { display: block; }
-/* textLayer must be absolutely positioned and same CSS size as canvas */
+
 .textLayer {
     position: absolute;
     top: 0;
     left: 0;
-    /* allow text selection and pointer events */
     pointer-events: auto;
     user-select: text;
 }
-/* spans are created by pdf.js; keep whitespace */
 .textLayer span { white-space: pre; }

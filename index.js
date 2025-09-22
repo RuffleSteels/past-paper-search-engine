@@ -15,6 +15,7 @@ async function processPaper(paper) {
 
     // make sure output dir exists
     await fs.mkdir(outDir, { recursive: true });
+    await fs.mkdir("./merged", { recursive: true });
     const fileBytes = await fs.readFile(pdfPath);
     const srcDoc = await PDFDocument.load(fileBytes);
     // extract split points
@@ -37,8 +38,12 @@ async function processPaper(paper) {
             outDir,
             `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
         );
+        const outPath2 = path.join(
+            "./merged",
+            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
+        );
 
-        await stitchClip(srcDoc, clip, outPath, minX, maxX);
+        await stitchClip(srcDoc, clip, outPath, outPath2, minX, maxX);
 
         await prisma.examQuestion.upsert({
             where: { path: outPath },
