@@ -136,7 +136,7 @@ function loadPage(pageNum,viewer, query) {
         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
         const scale = viewer.clientWidth / unscaledViewport.width;
         const viewport = pdfPage.getViewport({ scale });
-        const outputScale = window.devicePixelRatio || 1;
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = viewport.width * outputScale;
         canvas.height = viewport.height * outputScale;
         canvas.style.width = "100%";
@@ -156,19 +156,16 @@ function loadPage(pageNum,viewer, query) {
             transform: [outputScale, 0, 0, outputScale, 0, 0],
         });
 
-        pdfPage.getTextContent().then(textContent => {
-            // ensure the text-layer <div> exists and has css class "textLayer"
-            // the old helper used to be invoked like this in many examples:
-            pdfjsLib.renderTextLayer({
+        const textPromise = pdfPage.getTextContent().then(textContent => {
+            return pdfjsLib.renderTextLayer({
                 textContent,
-                container: container,
-                viewport: viewport,
+                container,
+                viewport,
                 textDivs: [],
-            });
+            }).promise; // 👈 return this promise
         });
 
-        page.setAttribute("data-loaded", "true");
-        return renderTask.promise.then(() => pdfPage);
+        return Promise.all([renderTask.promise, textPromise]).then(() => pdfPage);
     });
 }
 function highlightWordInTextLayer(word, container, viewer, path) {
@@ -295,53 +292,43 @@ async function renderQuestion(data, query, q) {
     const viewer = document.createElement("div");
     viewer.className = "questionContainer";
     viewer.id = "question" + q;
-    wrapper.style.opacity = "0";
+    wrapper.appendChild(viewer);
     document.getElementById("results").appendChild(wrapper);
 
-// Create and load all pages
-    let heightBefore = 0;
-    let currPageHeight = 0
     let scrollH = -1;
-    wrapper.appendChild(viewer);
+
+    // Pre-create containers for all pages
     for (let i = 1; i <= pdf.numPages; i++) {
-        const page = createEmptyPage(i);
-        viewer.appendChild(page);
+        viewer.appendChild(createEmptyPage(i));
+    }
 
-        const pdfPage = await loadPage(i, viewer, query)
+    // Render all pages in parallel
+    const pagePromises = Array.from({ length: pdf.numPages }, async (_, idx) => {
+        const pageNum = idx + 1;
+        const pageContainer = viewer.querySelector(`#pageContainer${pageNum}`);
+        const pdfPage = await loadPage(pageNum, viewer);
 
-            const viewport = pdfPage.getViewport({ scale: DEFAULT_SCALE });
-            PAGE_HEIGHT = viewport.height;
-            currPageHeight = PAGE_HEIGHT
-
-
-            heightBefore += PAGE_HEIGHT
-
-
-        await sleep(10);
-
-            if (stop) return
-
+        // highlight once text layer is ready
         if (scrollH < 0) {
-            scrollH = await highlightWordInTextLayer(
+            const foundScroll = highlightWordInTextLayer(
                 query,
-                page.querySelector(".textLayer"),
+                pageContainer.querySelector(".textLayer"),
                 viewer,
                 path
             );
-            viewer.scrollTop = scrollH;
-            setTimeout(() => {
-                if (stop) return
-                wrapper.style.opacity = '1'
-            }, 500);
-
+            if (foundScroll >= 0) {
+                scrollH = foundScroll;
+                viewer.scrollTop = scrollH;
+            }
         }
+        return pdfPage;
+    });
 
+    // wait for ALL pages + highlighting to finish
+    await Promise.all(pagePromises);
 
-
-
-    }
-
-
+    // only after everything is ready
+    return true; // signal finished
 }
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -368,8 +355,14 @@ async function search(input = true, page = 1) {
         pageNum = 1
         maxPages = 1
         checkNav()
+        document.querySelector('.resultsNumWrapper').style.display = 'none';
+        document.querySelector('.gradientContainer.second').style.display = 'none';
         document.getElementById('results').innerHTML = '';
         document.querySelector('#noResults').style.display = 'none';
+        document.querySelector('#resultsNum').innerHTML = '';
+        document.querySelector('#curPage').innerHTML = 1;
+        document.querySelector('#pageNum').innerHTML = 1;
+        document.querySelector('.pageNav').style.display = 'none';
         return;
     }
 
@@ -386,7 +379,7 @@ async function search(input = true, page = 1) {
     try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}`, { signal });
         const data = await res.json();
-
+        document.querySelector('.pageNav').style.display = 'flex';
         // ✅ Ignore outdated responses
         if (searchId !== currentSearchId) return;
 
@@ -404,18 +397,29 @@ async function search(input = true, page = 1) {
                 initial = false;
                 document.querySelector("#pageNum").innerHTML = data?.totalPages || 1;
             }
-
+            document.querySelector('.resultsNumWrapper').style.display = 'block';
+            document.querySelector('#results').style.opacity = 0
             document.querySelector('#noResults').style.display = 'none';
+            const promises = [];
 
             for (let i = 0; i < data.data.length && i < 10; i++) {
                 if (searchId !== currentSearchId || stop) {
                     document.getElementById('results').innerHTML = '';
                     return;
                 }
-                await renderQuestion(data.data[i], query, i);
+                // Don’t await here → just push the promise
+                promises.push(renderQuestion(data.data[i], query, i));
             }
+
+            // Wait for ALL to finish
+            await Promise.all(promises);
+            document.querySelector('.gradientContainer.second').style.display = 'block';
+            document.querySelector('#results').style.opacity = 1
         } else {
+            document.querySelector('.gradientContainer.second').style.display = 'none';
             document.querySelector('#noResults').style.display = 'block';
+            document.querySelector('.pageNav').style.display = 'none';
+            document.querySelector('.resultsNumWrapper').style.display = 'none';
         }
     } catch (err) {
         if (err.name === 'AbortError') {

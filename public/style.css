@@ -55,6 +55,7 @@
 .gradientContainer.second {
     top: unset;
     bottom: 0;
+    display: none;
     background: radial-gradient(130.09% 93.1% at 107.81% -3.3%, #1A191D 0%,  transparent 100%);
     transform: rotate(180deg);
 }
@@ -90,11 +91,12 @@
     cursor: default;
 }
 .pageNav {
-    display: flex;
+    display: none;
     flex-direction: row;
     justify-content: start;
     align-items: center;
     font-size: 24px;
+
 }
 .nextPage {
 
@@ -109,7 +111,7 @@
     display: none;
 }
 .questionWrapper.fullSize .questionContainer {
-    max-height: auto;
+    max-height: unset;
 }
 .mainBox .headerText {
     font-size: 32px
@@ -138,6 +140,7 @@
 }
 #results {
     position: relative;
+    opacity: 0;
     /*display: grid;*/
     /*grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));*/
     top: 0;
@@ -159,7 +162,22 @@ body {
 
     width: 100vw;
 }
-
+.searchInput::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+}
+.searchInput {
+    font-size: 24px;
+    font-family: "Poppins", sans-serif;
+    background: rgba(255, 255, 255, 0.24);
+    border: none;
+    outline: none;
+    color: white;
+    /*text-decoration: underline;*/
+    padding: 6px 12px;
+}
+.resultsNumWrapper {
+    display: none;
+}
 canvas { display: block; }
 
 .textLayer {
