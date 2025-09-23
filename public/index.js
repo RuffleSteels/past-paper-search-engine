@@ -395,9 +395,11 @@ async function search(input = true, page = 1) {
 
         if (data.success && data.data.length > 0) {
             if (input) {
+
                 pageNum = 1;
                 maxPages = data?.totalPages || 1;
-                checkNav();
+                document.querySelector('#resultsNum').innerHTML =data?.totalCount || 1
+                    checkNav();
                 document.querySelector('#curPage').innerHTML = 1;
                 initial = false;
                 document.querySelector("#pageNum").innerHTML = data?.totalPages || 1;

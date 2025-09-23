@@ -49,7 +49,7 @@ app.get('/api/search', async (req, res) => {
         return item.question;
     });
 
-    res.json({success: true, totalPages: Math.ceil(totalCount / pageSize), data: pdfNames});
+    res.json({success: true, totalCount, totalPages: Math.ceil(totalCount / pageSize), data: pdfNames});
 });
 
 app.use('/question', express.static('./merged'));
