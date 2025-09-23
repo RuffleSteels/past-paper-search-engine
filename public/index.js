@@ -379,7 +379,7 @@ async function search(input = true, page = 1) {
     try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}`, { signal });
         const data = await res.json();
-        document.querySelector('.pageNav').style.display = 'flex';
+
         // ✅ Ignore outdated responses
         if (searchId !== currentSearchId) return;
 
@@ -397,7 +397,7 @@ async function search(input = true, page = 1) {
                 initial = false;
                 document.querySelector("#pageNum").innerHTML = data?.totalPages || 1;
             }
-            document.querySelector('.resultsNumWrapper').style.display = 'block';
+
             document.querySelector('#results').style.opacity = 0
             document.querySelector('#noResults').style.display = 'none';
             const promises = [];
@@ -413,8 +413,10 @@ async function search(input = true, page = 1) {
 
             // Wait for ALL to finish
             await Promise.all(promises);
+            document.querySelector('.resultsNumWrapper').style.display = 'block';
             document.querySelector('.gradientContainer.second').style.display = 'block';
             document.querySelector('#results').style.opacity = 1
+            document.querySelector('.pageNav').style.display = 'flex';
         } else {
             document.querySelector('.gradientContainer.second').style.display = 'none';
             document.querySelector('#noResults').style.display = 'block';
