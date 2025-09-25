@@ -1,5 +1,5 @@
 import fs from "fs/promises";
-import { PDFDocument } from "pdf-lib";
+import {degrees, PDFDocument} from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, Image } from "@napi-rs/canvas";
@@ -40,7 +40,69 @@ function pdfLeftToViewportLeft(pdfLeft, viewport) {
     const [viewportX,] = viewport.convertToViewportPoint(pdfLeft, 0);
     return viewportX;
 }
+function isValidString(str) {
+    const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?))*\s*$/i;
+    return regex.test(str);
+}
+export async function extractPageSplitsMs(pdfPath, srcDoc) {
+    const newDoc = await PDFDocument.create();
+    const [srcPage] = await newDoc.copyPages(srcDoc, [1]);
 
+    const fileData = new Uint8Array(await fs.readFile(pdfPath));
+    const pdf = await pdfjsLib.getDocument({ data: fileData }).promise;
+
+    let questionCounter = 1;
+    const pageSplits = {};
+
+    let minX = 0;
+    let maxX = 1;
+    let residual = ''
+    for (let i = 2; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1 })
+        let splits = [];
+
+        const textContent = await page.getTextContent();
+
+        for (const item of textContent.items) {
+            const text = (item.str || "").toLowerCase();
+
+            if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctx).left < 100 ) {
+                const clean = text.replace(/\D/g, "")
+                if (parseInt(clean) === questionCounter) {
+                    // console.log(questionCounter)
+
+                    const viewportHeight = viewport.height;
+                    const rect = getTextItemRect(item, viewport, ctx);
+                    splits.push((rect.top) / viewportHeight);
+
+                    questionCounter++
+                } else {
+                    if (questionCounter > 9) {
+                        if (parseInt(`${residual}${clean}`) === questionCounter) {
+                            // console.log(questionCounter)
+
+                            const viewportHeight = viewport.height;
+                            const rect = getTextItemRect(item, viewport, ctx);
+                            splits.push((rect.top) / viewportHeight);
+
+                            questionCounter++;
+                            residual = ''
+                        } else {
+                            residual = clean
+                        }
+                    }
+                }
+            }
+        }
+
+        splits = splits.sort((a, b) => a - b);
+
+        pageSplits[i] = [...splits]
+    }
+    console.log(pageSplits)
+    return [pageSplits, [minX, maxX], pdf.numPages];
+}
 
 // Use pdf.js to extract horizontal "special lines"
 export async function extractPageSplits(pdfPath, srcDoc) {
@@ -383,8 +445,7 @@ export async function stackPdfVertically(inputPath, outputPath) {
     const newPdfBytes = await newPdf.save();
     await fs.writeFile(outputPath, newPdfBytes);
 }
-// Use pdf-lib to crop & stitch each clip
-export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp) {
+export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp, isMs=false) {
     let { startPage, endPage, startY, endY } = clip;
 
     const newDoc = await PDFDocument.create();
@@ -394,46 +455,54 @@ export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp) 
 
     for (let p = startPage; p <= endPage; p++) {
         const [srcPage] = await newDoc.copyPages(srcDoc, [p - 1]);
-        // Use CropBox to match pdf.js rendering
-        const { width, height } = srcPage.getCropBox();
 
+        // get crop size
+        const { width, height } = srcPage.getCropBox();
+        console.log(width, height);
+        console.log(startPage, endPage)
         let top, bottom;
 
-        const minX = minXp * width + (srcPage.getSize().width - srcPage.getCropBox().width )/2
-        const maxX = (maxXp-.07) * width + (srcPage.getSize().width - srcPage.getCropBox().width )/2
-        const epsilon = (srcPage.getSize().height - srcPage.getCropBox().height)/2;
+        const minX = isMs
+            ? 0
+            : (minXp * width + (srcPage.getSize().width - srcPage.getCropBox().width) / 2);
 
-        if (startPage === endPage) {
+        const maxX = isMs
+            ? width
+            : ((maxXp - 0.07) * width + (srcPage.getSize().width - srcPage.getCropBox().width) / 2);
+
+        const epsilon = (srcPage.getSize().height - srcPage.getCropBox().height) / 2;
+
+        if (parseInt(startPage )=== parseInt(endPage)) {
             top = fracFromTopToPdfY(startY, height);
             bottom = fracFromTopToPdfY(endY, height);
-        } else if (p === startPage) {
+        } else if (parseInt(p) === parseInt(startPage)) {
             top = fracFromTopToPdfY(startY, height);
-            bottom = 100 + epsilon;
-        } else if (p === endPage) {
+            bottom = (isMs ? 0 : 100) + epsilon;
+        } else if (parseInt(p) === parseInt(endPage)) {
             top = height - 20 - 20 + epsilon;
             bottom = fracFromTopToPdfY(endY, height);
         } else {
             top = height - 20 - 20 + epsilon;
-            bottom = 100 + epsilon;
+            bottom = (isMs ? 0 : 100) + epsilon;
         }
 
         top = Math.min(Math.max(top, 0), height);
         bottom = Math.min(Math.max(bottom, 0), height);
 
         const fragHeight = top - bottom;
+        console.log(fragHeight)
         if (fragHeight <= 0) continue;
 
         const embedded = await newDoc.embedPage(srcPage, {
             left: minX,
-            bottom,
-            right: maxX,
-            top,
+            bottom:  bottom,
+            right:  maxX,
+            top:  top,
         });
 
-        fragments.push({ embedded, width: maxX - minX, height: fragHeight });
+        fragments.push({ embedded, width: maxX - minX, height:  fragHeight });
         totalHeight += fragHeight;
         maxWidth = Math.max(maxWidth, maxX - minX);
-
     }
 
     if (fragments.length === 0) {
@@ -457,9 +526,10 @@ export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp) 
     const outBytes = await newDoc.save();
     await fs.writeFile(outPath, outBytes);
 
-    await removeWhiteBands(outPath, outPath)
-
-    await stackPdfVertically(outPath, outPath2);
+    if (!isMs) {
+        await removeWhiteBands(outPath, outPath);
+        await stackPdfVertically(outPath, outPath2);
+    }
 
     console.log("✅ Saved", outPath);
 }

@@ -165,6 +165,14 @@ body {
 .searchInput::placeholder {
     color: rgba(255, 255, 255, 0.45);
 }
+a > * {
+    margin: 0;
+    padding: 0;
+}
+a {
+    color: white;
+    margin: 0;
+}
 .searchInput {
     font-size: 24px;
     font-family: "Poppins", sans-serif;

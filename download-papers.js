@@ -50,40 +50,40 @@ async function downloadPDF(url, outputPath) {
         return false;
     }
     const buffer = Buffer.from(await res.arrayBuffer());
-    fs.writeFileSync(outputPath, buffer);
+    await fs.writeFile(outputPath, buffer);
     return true;
 }
 
 async function main() {
     const folder = path.resolve("./papers");
     await fs.mkdir(folder, { recursive: true });
-    await scanAndInsert(folder)
-    // for (const year of years) {
-    //     for (const paper of papers) {
-    //         const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/QP/June%20${year}%20QP.pdf`;
-    //         const filename = `${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${year}-qp.pdf`;
-    //         const outputPath = path.join(folder, filename);
-    //
-    //         console.log(`⬇️ Downloading: ${pdfLink}`);
-    //         const success = await downloadPDF(pdfLink, outputPath);
-    //
-    //         if (success) {
-    //             await prisma.examPaper.upsert({
-    //                 where: { path: outputPath },
-    //                 update: {}, // do nothing if already exists
-    //                 create: {
-    //                     examBoard: examBoard.toLowerCase(),
-    //                     subject: subject.toLowerCase(),
-    //                     paper: paper.toLowerCase(),
-    //                     year,
-    //                     document: 'qp',
-    //                     path: outputPath,
-    //                 },
-    //             });
-    //             console.log(`✅ Saved & inserted: ${filename}`);
-    //         }
-    //     }
-    // }
+    // await scanAndInsert(folder)
+    for (const year of years) {
+        for (const paper of papers) {
+            const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/MS/June%20${year}%20MS.pdf`;
+            const filename = `${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${year}-ms.pdf`;
+            const outputPath = path.join(folder, filename);
+
+            console.log(`⬇️ Downloading: ${pdfLink}`);
+            const success = await downloadPDF(pdfLink, outputPath);
+
+            if (success) {
+                await prisma.examPaper.upsert({
+                    where: { path: outputPath },
+                    update: {}, // do nothing if already exists
+                    create: {
+                        examBoard: examBoard.toLowerCase(),
+                        subject: subject.toLowerCase(),
+                        paper: paper.toLowerCase(),
+                        year,
+                        document: 'ms',
+                        path: outputPath,
+                    },
+                });
+                console.log(`✅ Saved & inserted: ${filename}`);
+            }
+        }
+    }
 }
 
 main()

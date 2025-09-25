@@ -229,8 +229,13 @@ async function renderQuestion(data, query, q) {
     <div class="questionTitle">
         <h4 class="subheader">
         ${year} ${paper} Q${question}
-        </h4>
+        </h4>        <a href="${'question/' + path.split('.')[0] + '-ms.pdf'}" target="_blank" rel="noopener noreferrer">
+            <h3>
+                MS
+            </h3>
+        </a>
         <a href="${'question/' + path}" target="_blank" rel="noopener noreferrer">
+
         <svg
         class="externalButton"
   width="24"
