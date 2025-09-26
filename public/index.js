@@ -125,22 +125,16 @@ function createEmptyPage(num) {
 
     return page;
 }
-
-function loadPage(pageNum,viewer, query) {
+function loadPage(pageNum, viewer, query) {
     return pdfDocument.getPage(pageNum).then((pdfPage) => {
         const page = viewer.querySelector(`#pageContainer${pageNum}`);
-        const canvas = page.querySelector("canvas");
         const wrapper = page.querySelector(".canvasWrapper");
         const container = page.querySelector(".textLayer");
-        const canvasContext = canvas.getContext("2d");
+
         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
         const scale = viewer.clientWidth / unscaledViewport.width;
         const viewport = pdfPage.getViewport({ scale });
         const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = viewport.width * outputScale;
-        canvas.height = viewport.height * outputScale;
-        canvas.style.width = "100%";
-        canvas.style.height = "auto";
 
         page.style.width = "100%";
         page.style.height = "auto";
@@ -149,25 +143,85 @@ function loadPage(pageNum,viewer, query) {
         container.style.width = "100%";
         container.style.height = "auto";
 
-        // Render PDF page into canvas
+        // create an offscreen canvas (not appended to DOM)
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = viewport.width * outputScale;
+        canvas.height = viewport.height * outputScale;
+
         const renderTask = pdfPage.render({
-            canvasContext,
+            canvasContext: ctx,
             viewport,
             transform: [outputScale, 0, 0, outputScale, 0, 0],
         });
 
-        const textPromise = pdfPage.getTextContent().then(textContent => {
-            return pdfjsLib.renderTextLayer({
-                textContent,
-                container,
-                viewport,
-                textDivs: [],
-            }).promise; // 👈 return this promise
-        });
+        return renderTask.promise.then(() => {
+            // Convert canvas to image
+            const img = document.createElement("img");
+            img.src = canvas.toDataURL("image/png"); // compress with "image/jpeg" for lighter size
+            img.style.width = "100%";
+            img.style.height = "auto";
 
-        return Promise.all([renderTask.promise, textPromise]).then(() => pdfPage);
+            // clear wrapper, then append image
+            wrapper.innerHTML = "";
+            wrapper.appendChild(img);
+
+            // render text layer on top (for selection/search)
+            return pdfPage.getTextContent().then(textContent => {
+                return pdfjsLib.renderTextLayer({
+                    textContent,
+                    container,
+                    viewport,
+                    textDivs: [],
+                }).promise;
+            });
+        });
     });
 }
+
+// function loadPage(pageNum,viewer, query) {
+//     return pdfDocument.getPage(pageNum).then((pdfPage) => {
+//         const page = viewer.querySelector(`#pageContainer${pageNum}`);
+//         const canvas = page.querySelector("canvas");
+//         const wrapper = page.querySelector(".canvasWrapper");
+//         const container = page.querySelector(".textLayer");
+//         const canvasContext = canvas.getContext("2d");
+//         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+//         const scale = viewer.clientWidth / unscaledViewport.width;
+//         const viewport = pdfPage.getViewport({ scale });
+//         const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+//         canvas.width = viewport.width * outputScale;
+//         canvas.height = viewport.height * outputScale;
+//         canvas.style.width = "100%";
+//         canvas.style.height = "auto";
+//
+//         page.style.width = "100%";
+//         page.style.height = "auto";
+//         wrapper.style.width = "100%";
+//         wrapper.style.height = "auto";
+//         container.style.width = "100%";
+//         container.style.height = "auto";
+//
+//         // Render PDF page into canvas
+//         const renderTask = pdfPage.render({
+//             canvasContext,
+//             viewport,
+//             transform: [outputScale, 0, 0, outputScale, 0, 0],
+//         });
+//
+//         const textPromise = pdfPage.getTextContent().then(textContent => {
+//             return pdfjsLib.renderTextLayer({
+//                 textContent,
+//                 container,
+//                 viewport,
+//                 textDivs: [],
+//             }).promise; // 👈 return this promise
+//         });
+//
+//         return Promise.all([textPromise]).then(() => pdfPage);
+//     });
+// }
 function highlightWordInTextLayer(word, container, viewer, path) {
     if (!word) return -1;
 

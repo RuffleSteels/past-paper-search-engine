@@ -34,6 +34,7 @@
 }
 .mainBox {
     padding: 0 120px;
+    overflow: hidden;
 }
 .mainContainer {
 
@@ -120,6 +121,7 @@
     display: none;
 }
 .questionContainer {
+    background: white;
     max-height: 300px;
     width: 100%;
     overflow: scroll;
@@ -196,3 +198,28 @@ canvas { display: block; }
     user-select: text;
 }
 .textLayer span { white-space: pre; }
+.resultsContainer {
+    overflow: hidden;
+    width: 100%;
+
+}
+@media (max-width: 768px) {
+    #results {
+        display: flex;
+        /*flex-direction: row;*/
+        overflow-x: scroll;
+        scroll-snap-type: x mandatory;
+        /*width: 100%;*/
+        column-gap: 0;
+    }
+    .mainBox {
+        padding: 0;
+    }
+    .questionWrapper {
+        padding: 0 16px;
+        box-sizing: border-box;
+        min-width: 100vw;
+        scroll-snap-align: start;
+        display: inline-block;
+    }
+}
