@@ -214,8 +214,8 @@ async function main() {
         document: 'ms',
             examBoard: 'edexcel',
             subject: 'physics',
-        // paper: 'paper-1',
-        // year: 2017
+        // paper: 'paper-2',
+        // year: 2023
     }
     const papers = await prisma.examPaper.findMany({
         where

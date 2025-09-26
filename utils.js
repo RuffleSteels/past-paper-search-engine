@@ -453,13 +453,12 @@ export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp, 
     let totalHeight = 0;
     let maxWidth = 0;
 
-    for (let p = startPage; p <= endPage; p++) {
+    for (let p = parseInt(startPage); p <= parseInt(endPage); p++) {
         const [srcPage] = await newDoc.copyPages(srcDoc, [p - 1]);
 
         // get crop size
         const { width, height } = srcPage.getCropBox();
-        console.log(width, height);
-        console.log(startPage, endPage)
+
         let top, bottom;
 
         const minX = isMs
