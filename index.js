@@ -33,36 +33,36 @@ async function processPaper(paper) {
     const clips = buildClips(pageSplits);
 
     console.log(clips)
-    // // stitch each clip and insert into DB
-    // for (let i = 0; i < clips.length; i++) {
-    //     const clip = clips[i];
-    //     const outPath = path.join(
-    //         outDir,
-    //         `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
-    //     );
-    //     const outPath2 = path.join(
-    //         "./merged",
-    //         `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
-    //     );
-    //
-    //     await stitchClip(srcDoc, clip, outPath, outPath2, minX, maxX);
-    //
-    //     await prisma.examQuestion.upsert({
-    //         where: { path: outPath },
-    //         update: {}, // no update
-    //         create: {
-    //             examBoard,
-    //             subject,
-    //             paper: paperType,
-    //             year: parseInt(year),
-    //             path: outPath,
-    //             document: 'qp',
-    //             question: i + 1,
-    //         },
-    //     });
-    //
-    //     console.log(`✅ Saved & inserted: ${outPath}`);
-    // }
+    // stitch each clip and insert into DB
+    for (let i = 0; i < clips.length; i++) {
+        const clip = clips[i];
+        const outPath = path.join(
+            outDir,
+            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
+        );
+        const outPath2 = path.join(
+            "./merged",
+            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
+        );
+
+        await stitchClip(srcDoc, clip, outPath, outPath2, minX, maxX);
+
+        await prisma.examQuestion.upsert({
+            where: { path: outPath },
+            update: {}, // no update
+            create: {
+                examBoard,
+                subject,
+                paper: paperType,
+                year: parseInt(year),
+                path: outPath,
+                document: 'qp',
+                question: i + 1,
+            },
+        });
+
+        console.log(`✅ Saved & inserted: ${outPath}`);
+    }
 }
 
 // import { degrees } from "pdf-lib";
@@ -211,7 +211,7 @@ async function processMs(paper) {
 async function main() {
     // fetch list of exam papers from DB
     const where =         {
-        document: 'ms',
+        document: 'qp',
             examBoard: 'edexcel',
             subject: 'physics',
         // paper: 'paper-2',
@@ -227,7 +227,7 @@ async function main() {
     //
     for (const paper of papers) {
         try {
-            await processMs(paper);
+            await processPaper(paper);
         } catch (err) {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }

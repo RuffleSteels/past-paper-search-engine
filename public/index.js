@@ -436,7 +436,7 @@ async function search(input = true, page = 1) {
     const searchId = ++currentSearchId;
 
     try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}`, { signal });
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}&f=${encodeURIComponent(JSON.stringify(window.currentFilters))}`, { signal });
         const data = await res.json();
 
         // ✅ Ignore outdated responses
@@ -470,7 +470,6 @@ async function search(input = true, page = 1) {
                 promises.push(renderQuestion(data.data[i], query, i));
             }
 
-            // Wait for ALL to finish
             await Promise.all(promises);
             document.querySelector('.resultsNumWrapper').style.display = 'block';
             document.querySelector('.gradientContainer.second').style.display = 'block';
@@ -489,7 +488,133 @@ async function search(input = true, page = 1) {
         console.error('Search error:', err);
     }
 }
-// search();
+function compareArrays(a, b) {
+    const normA = Array.from(a, x => x ?? undefined);
+    const normB = Array.from(b, x => x ?? undefined);
+
+    return (
+        normA.length === normB.length &&
+        normA.every((val, i) => val === normB[i])
+    );
+}
+function removeFilter(e,field, specific=null) {
+    e.stopPropagation()
+    const prev = JSON.parse(JSON.stringify(window.currentFilters[field]))
+    if (!specific) window.currentFilters[field] = window.distinct[field]
+    else if (window.currentFilters[field].map((i)=>i.toString()).includes(specific)) {
+        delete window.currentFilters[field][window.currentFilters[field].map((i)=>i.toString()).indexOf(specific)]
+        window.currentFilters[field] = window.currentFilters[field].filter(x => x !== undefined)
+    } else {
+        window.currentFilters[field].push(specific)
+        window.currentFilters[field] = window.currentFilters[field].filter(x => x !== undefined)
+    }
+    console.log(prev)
+    console.log(window.currentFilters[field])
+    console.log((!(window.distinct[field].length === 1)))
+    updateFilters((!compareArrays(prev, window.currentFilters[field])) && (!(window.distinct[field].length === 1)))
+}
+let openDrop = null
+function openDropdown(e,field) {
+    e.stopPropagation()
+    for (let f in window.distinct) {
+        if (f===field) continue;
+        document.querySelector(`.${f}Dropdown`).classList.remove('show')
+    }
+    if (openDrop === field) {
+        openDrop = null
+    } else {
+        openDrop = field
+    }
+
+    document.querySelector(`.${field}Dropdown`).classList.toggle('show')
+}
+document.addEventListener('click', () => {
+    // alert(openDrop)
+    if (openDrop) {
+        for (let f in window.distinct) {
+            document.querySelector(`.${f}Dropdown`).classList.remove('show')
+        }
+        openDrop = null
+    }
+})
+function cleanText(text) {
+    if (text.toString().includes('paper-')) {
+        return `Paper ${text.split('paper-')[1]}`
+    }
+    return text
+}
+function updateFilters(doSearch = true) {
+    if (window?.distinct) {
+        const container = document.querySelector('.searchFilterContainer')
+        container.innerHTML = ''
+        for (let field in window.distinct) {
+            const newDiv = document.createElement('div');
+            newDiv.classList.add('filterItem');
+            let innerText = 'all'
+
+            if (window.currentFilters[field].length === 0) {
+                if (window.distinct[field].length === 1) {
+                    innerText = cleanText(window.distinct[field][0])
+                }
+            }
+            else if (window.currentFilters[field].length === 1) {
+                innerText = cleanText(window.currentFilters[field][0])
+            }
+            else if (!compareArrays(window.currentFilters[field].map((i)=>i.toString()).sort(),window.distinct[field].map((i)=>i.toString()).sort())) {
+                innerText = window.currentFilters[field].map(i=>cleanText(i)).sort().join(', ')
+            }
+            newDiv.innerHTML = `
+                <h6 class="filterText">
+                    <div class="${field}Dropdown dropdownWrapper ${openDrop && openDrop===field ? 'show' : ''}">
+                        ${window.distinct[field].sort().map((item,i) => {
+                        return `<div onclick="removeFilter(event,'${field}', '${item}')" class="dropdownItem ${window.currentFilters[field].map((i)=>i.toString()).includes(item.toString()) ? 'selected' : ''}">
+                                    <h6 class="dropdownText">
+                                        ${cleanText(item)}
+                                    </h6>
+                                </div>`
+                        }).join('')}
+                    </div>
+                    ${field}
+                    <span onclick="openDropdown(event,'${field}')" class="innerText">
+                        ${innerText}
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M11.6603 5L3 20H20.3205L11.6603 5ZM11.6603 11L8.19615 17H15.1244L11.6603 11Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                    </span>
+                </h6>
+            `
+            container.appendChild(newDiv);
+        }
+        if (doSearch) search()
+    }
+}
+
+async function fetchFilters() {
+    const res = await fetch(`/api/filters`);
+    const data = await res.json();
+
+    if (data?.success) {
+        window.distinct = data.data
+
+        const currentFilter = {}
+        for (let field in data.data) {
+            currentFilter[field] = []
+        }
+        window.currentFilters = currentFilter
+        updateFilters()
+    }
+}
+
+fetchFilters()
 
 function checkNav() {
     console.log(pageNum - 1)

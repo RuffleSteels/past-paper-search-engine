@@ -35,6 +35,9 @@
 .mainBox {
     padding: 0 120px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 .mainContainer {
 
@@ -202,6 +205,64 @@ canvas { display: block; }
     overflow: hidden;
     width: 100%;
 
+}
+.searchFilterContainer {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+}h6 {
+    margin: 0;
+    padding: 0;
+ }
+.filterText {
+    margin: 0;
+    padding: 0;
+    font-size: 16px;
+    position: relative;
+}
+.dropdownText {
+    font-size: 16px;
+    padding: 1px 6px;
+    text-wrap: nowrap;
+}
+.dropdownItem.selected .dropdownText {
+    background: rgba(5, 5, 5, 0.29);
+}
+.dropdownItem {
+
+}
+.dropdownWrapper.show {
+    display: flex;
+}
+.dropdownWrapper {
+    display: none;
+    position: absolute;
+    top: 100%;
+    padding: 3px 4px;
+    gap: 6px;
+    left: 0;
+    /*display: flex;*/
+    background: rgba(255, 255, 255, 0.38);
+}
+.filterItem {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 6px 8px;
+    cursor: pointer;
+}
+.filterItem .innerText svg {
+    transform: rotate(180deg);
+    height: 16px;
+    width: 16px;
+}
+.filterItem .innerText {
+    display: inline-flex;
+    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 4px;
+    background: rgba(0, 0, 0, 0.2);
+    margin-left: 3px;
 }
 @media (max-width: 768px) {
     #results {

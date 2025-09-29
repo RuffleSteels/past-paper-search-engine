@@ -60,8 +60,8 @@ async function main() {
     // await scanAndInsert(folder)
     for (const year of years) {
         for (const paper of papers) {
-            const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/MS/June%20${year}%20MS.pdf`;
-            const filename = `${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${year}-ms.pdf`;
+            const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/QP/June%20${year}%20QP.pdf`;
+            const filename = `${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${year}-qp.pdf`;
             const outputPath = path.join(folder, filename);
 
             console.log(`⬇️ Downloading: ${pdfLink}`);
@@ -76,7 +76,7 @@ async function main() {
                         subject: subject.toLowerCase(),
                         paper: paper.toLowerCase(),
                         year,
-                        document: 'ms',
+                        document: 'qp',
                         path: outputPath,
                     },
                 });
