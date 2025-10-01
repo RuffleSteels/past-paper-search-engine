@@ -41,8 +41,8 @@ function pdfLeftToViewportLeft(pdfLeft, viewport) {
     return viewportX;
 }
 function isValidString(str) {
-    const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?))*\s*$/i;
-    return regex.test(str);
+    const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?)\**)*\s*$/i;
+    return regex.test(str.replace(/\s+/g, ''));
 }
 export async function extractPageSplitsMs(pdfPath, srcDoc) {
     const newDoc = await PDFDocument.create();
@@ -57,7 +57,7 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
     let minX = 0;
     let maxX = 1;
     let residual = ''
-    for (let i = 2; i <= pdf.numPages; i++) {
+    for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1 })
         let splits = [];
@@ -67,8 +67,10 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
         for (const item of textContent.items) {
             const text = (item.str || "").toLowerCase();
 
+
             if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctx).left < 100 ) {
                 const clean = text.replace(/\D/g, "")
+                console.log(clean)
                 if (parseInt(clean) === questionCounter) {
                     // console.log(questionCounter)
 
@@ -581,8 +583,8 @@ export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp, 
     await fs.writeFile(outPath, outBytes);
 
     if (!isMs) {
-        // await removeWhiteBands(outPath, outPath);
-        // await stackPdfVertically(outPath, outPath2);
+        await removeWhiteBands(outPath, outPath);
+        await stackPdfVertically(outPath, outPath2);
     }
 
     console.log("✅ Saved", outPath);

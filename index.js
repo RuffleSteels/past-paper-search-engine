@@ -127,10 +127,11 @@ async function rotatePage(srcDoc, pageIndex, angle) {
 
     return newPage;
 }
-async function processMs(paper) {
-    const { examBoard, subject, paper: paperType, year, path: pdfPath } = paper;
-
-    console.log(`📄 Processing ${examBoard}-${subject}-${paperType}-${year}`);
+async function processMs(paperr) {
+    const { examBoard, label, level, document, subject, paper, year, path: pdfPath } = paperr;
+    console.log(document)
+    const filename = `${level.toLowerCase()}-${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${label.trim().replace(/\s+/g, '-').toLowerCase()}${year ? `-${year}` : ''}-${document.toLowerCase()}`
+    console.log(`📄 Processing ${filename}.pdf`);
 
     await fs.mkdir(outDir, { recursive: true });
     await fs.mkdir("./merged", { recursive: true });
@@ -149,6 +150,8 @@ async function processMs(paper) {
     const pdfBytes = await pdfDoc.save();
     const srcDoc = await PDFDocument.load(pdfBytes);
     const result = await extractPageSplitsMs(pdfPath, srcDoc);
+
+    // console.log(re)
 
     const pageSplits= result[0]
     const minX = result[1][0]
@@ -186,11 +189,11 @@ async function processMs(paper) {
         const clip = clips[i];
         const outPath = path.join(
             outDir,
-            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}-ms.pdf`
+            `${filename}-Q${i + 1}.pdf`
         );
         const outPath2 = path.join(
             "./merged",
-            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}-ms.pdf`
+            `${filename}-Q${i + 1}.pdf`
         );
 
         await stitchClip(srcDoc, clip, outPath2, outPath2, minX, maxX, true);
@@ -201,11 +204,14 @@ async function processMs(paper) {
             create: {
                 examBoard,
                 subject,
-                paper: paperType,
-                year: parseInt(year),
+                paper: paper,
+                year: year ? parseInt(year) : null,
                 path: outPath2,
                 document: 'ms',
+                label,
                 question: i + 1,
+                level,
+                encoded: false
             },
         });
 
@@ -216,23 +222,23 @@ async function processMs(paper) {
 async function main() {
     // fetch list of exam papers from DB
     const where =         {
-        document: 'qp',
+        document: 'ms',
             examBoard: 'edexcel',
             subject: 'physics',
-        // paper: 'paper-3',
+        // paper: 'paper-1',
         // label: 'specimen'
     }
     const papers = await prisma.examPaper.findMany({
         where
     });
     // //
-    // // await prisma.examQuestion.deleteMany({
-    // //     where
-    // // })
+    await prisma.examQuestion.deleteMany({
+        where
+    })
     //
     for (const paper of papers) {
         try {
-            await processPaper(paper);
+            await processMs(paper);
         } catch (err) {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }

@@ -34,7 +34,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs";
 
-    const url = "papers/edexcel-physics-paper-3-2024-ms.pdf"; // served over http
+    const url = "papers/a-level-edexcel-physics-paper-1-specimen-ms.pdf"; // served over http
 
     const scale = 1;
 
@@ -98,10 +98,9 @@
     let questionNum = 1
     let residual = ''
     function isValidString(str) {
-        const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?))*\s*$/i;
-        return regex.test(str);
+        const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?))?\**\s*$/i;
+        return regex.test(str.replace(/\s+/g, ''));
     }
-
     async function drawQNum(item, viewport, ctxOverlay) {
         const rect = getTextItemRect(item, viewport, ctxOverlay);
         drawHighlight(ctxOverlay, rect);
@@ -136,7 +135,7 @@
         for (const item of textContent.items) {
             const text = (item.str || "").toLowerCase();
 
-            console.log(isValidString('12b)(ii)'))
+            console.log(isValidString('20(a)(i)'))
             if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctxOverlay).left < 100 ) {
                 // console.log(item)
                 // console.log(getTextItemRect(item, viewport, ctxOverlay))

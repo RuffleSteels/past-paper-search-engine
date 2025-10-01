@@ -58,10 +58,12 @@ async function main() {
     const folder = path.resolve("./papers");
     await fs.mkdir(folder, { recursive: true });
     // await scanAndInsert(folder)
+    const document = 'ms'
+    const isSpecimen = true;
     for (const year of years) {
         for (const paper of papers) {
-            const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/QP/June%20${year}%20QP.pdf`;
-            const filename = `a-level-${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-june-${year}-qp.pdf`;
+            const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/${document.toUpperCase()}/${isSpecimen ? 'Specimen' :`June%20${year}`}%20${document.toUpperCase()}.pdf`;
+            const filename = `a-level-${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${isSpecimen ? 'specimen' :`june-${year}`}-${document}.pdf`;
             const outputPath = path.join(folder, filename);
 
             console.log(`⬇️ Downloading: ${pdfLink}`);
@@ -76,9 +78,9 @@ async function main() {
                         examBoard: examBoard.toLowerCase(),
                         subject: subject.toLowerCase(),
                         paper: paper.toLowerCase(),
-                        year: year,
-                        document: 'qp',
-                        label: 'june',
+                        year: isSpecimen ? null : year,
+                        document: document,
+                        label: isSpecimen ? 'specimen' : 'june',
                         path: outputPath,
                     },
                 });
