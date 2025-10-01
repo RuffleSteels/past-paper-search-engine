@@ -105,9 +105,17 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
     console.log(pageSplits)
     return [pageSplits, [minX, maxX], pdf.numPages];
 }
+function isBlack(r, g, b, a, threshold = 1) {
+    if (a === 0) return false; // fully transparent, not black
 
+    // Normalize brightness (0=black, 1=white)
+    const brightness = (r + g + b) / (3 * 255);
+
+    // Accept if brightness is below (1 - threshold)
+    return brightness <= (1 - threshold);
+}
 // Use pdf.js to extract horizontal "special lines"
-export async function extractPageSplits(pdfPath, srcDoc) {
+export async function extractPageSplits(pdfPath, srcDoc, board) {
     const newDoc = await PDFDocument.create();
     const [srcPage] = await newDoc.copyPages(srcDoc, [1]);
     let encoded = false;
@@ -120,6 +128,8 @@ export async function extractPageSplits(pdfPath, srcDoc) {
     let minX = 0;
     let maxX = 1;
     let fontName = ''
+    let endTrue = false
+    let endBound = 1
     for (let i = 2; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
 
@@ -138,17 +148,7 @@ export async function extractPageSplits(pdfPath, srcDoc) {
 
         const textContent = await page.getTextContent();
 
-        if (fontName === '') {
-            for (const item of textContent.items) {
-                const text = (item.str || "").toLowerCase();
-                if (text.includes("total for question") || text.includes("answer all questions in the spaces provided")) {
-                    fontName = item.fontName;
-                }
-            }
-        }
-
-        if (fontName === '') {
-            encoded = true
+        if (board === 'ocr-mei-further') {
             const { canvas, viewport } = await renderPageToCanvas(pdfPath, i, 1.0);
 
             const ctx = canvas.getContext("2d");
@@ -157,17 +157,29 @@ export async function extractPageSplits(pdfPath, srcDoc) {
             canvas.height = viewport.height;
 
             await page.render({canvasContext: ctx, viewport}).promise;
+            for (const item of textContent.items) {
+                const text = (item.str || "").toLowerCase();
+                if (text.includes('copyright information') && i >= pdf.numPages) {
+                    const rect = getTextItemRect(item, viewport, ctx);
+                    endBound = (rect.top - 40 - epsilon) / viewport.height;
+                }
+                if (text.includes("end of question paper")) {
+                    endTrue = true;
+                    const rect = getTextItemRect(item, viewport, ctx);
+                    splits.push((rect.top- epsilon) / viewport.height);
+                }
+            }
 
-            const cropX = 42;
-            const cropWidth = 4;
+
+
+
+            const cropX = 49;
+            const cropWidth = 5; // (50 - 10)
             const cropHeight = canvas.height;
 
             const imageData = ctx.getImageData(cropX, 0, cropWidth, cropHeight);
             const data = imageData.data;
 
-            function isBlack(r, g, b, a) {
-                return a > 0 && r < 30 && g < 30 && b < 30;
-            }
 
             const blackYs = [];
             let lastY = -Infinity; // Start with a very negative number
@@ -182,81 +194,150 @@ export async function extractPageSplits(pdfPath, srcDoc) {
                     const b = data[idx + 2];
                     const a = data[idx + 3];
 
-                    if (isBlack(r, g, b, a)) {
+                    if (isBlack(r, g, b, a, 0.8)) {
+                        // Only count this if it's far enough from the last recorded Y
                         if (y - lastY >= 10) {
                             blackYs.push(y);
                             lastY = y;
                         }
                         foundInRow = true;
-                        break;
+                        break; // No need to keep scanning the rest of this row
                     }
                 }
             }
 
-            console.log("Black pixel Y positions:", blackYs, i);
+            console.log("Black pixel Y positions:", blackYs);
 
             for (const y of blackYs) {
+                const bound = (y - 8 - epsilon) / viewport.height
+                if (i >= pdf.numPages && bound > endBound) continue
 
-                splits.push((y - 8 - epsilon) / viewport.height);
+                splits.push(bound);
             }
-        } else {
-            for (const item of textContent.items) {
-                const text = (item.str || "").toLowerCase();
-                if (item.fontName) {
-                    const cleaned = text.replace(/[* ]/g, "");
-                    if (/^-?\d+$/.test(cleaned)) {
-                        if (parseInt(cleaned, 10) === questionCounter) {
-                            const viewportHeight = viewport.height;
-                            const rect = getTextItemRect(item, viewport, ctx);
-                            if (rect.left > 46) continue;
-                            questionCounter++;
-                            splits.push((rect.top - epsilon) / viewportHeight);
+
+            splits = splits.sort((a, b) => a - b);
+            pageSplits[i] = [...splits]
+        } else if (board === 'edexcel') {
+            if (fontName === '') {
+                for (const item of textContent.items) {
+                    const text = (item.str || "").toLowerCase();
+                    if (text.includes("total for question") || text.includes("answer all questions in the spaces provided")) {
+                        fontName = item.fontName;
+                    }
+                }
+            }
+
+            if (fontName === '') {
+                encoded = true
+                const { canvas, viewport } = await renderPageToCanvas(pdfPath, i, 1.0);
+
+                const ctx = canvas.getContext("2d");
+
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({canvasContext: ctx, viewport}).promise;
+
+                const cropX = 42;
+                const cropWidth = 4;
+                const cropHeight = canvas.height;
+
+                const imageData = ctx.getImageData(cropX, 0, cropWidth, cropHeight);
+                const data = imageData.data;
+
+                const blackYs = [];
+                let lastY = -Infinity; // Start with a very negative number
+
+                for (let y = 0; y < cropHeight; y++) {
+                    let foundInRow = false;
+
+                    for (let x = 0; x < cropWidth; x++) {
+                        const idx = (y * cropWidth + x) * 4; // RGBA
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+                        const a = data[idx + 3];
+
+                        if (isBlack(r, g, b, a)) {
+                            if (y - lastY >= 10) {
+                                blackYs.push(y);
+                                lastY = y;
+                            }
+                            foundInRow = true;
+                            break;
+                        }
+                    }
+                }
+
+                console.log("Black pixel Y positions:", blackYs, i);
+
+                for (const y of blackYs) {
+                    splits.push((y - 8 - epsilon) / viewport.height);
+                }
+            } else {
+                for (const item of textContent.items) {
+                    const text = (item.str || "").toLowerCase();
+                    if (item.fontName) {
+                        const cleaned = text.replace(/[* ]/g, "");
+                        if (/^-?\d+$/.test(cleaned)) {
+                            if (parseInt(cleaned, 10) === questionCounter) {
+                                const viewportHeight = viewport.height;
+                                const rect = getTextItemRect(item, viewport, ctx);
+                                if (rect.left > 46) continue;
+                                questionCounter++;
+                                splits.push((rect.top - epsilon) / viewportHeight);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        splits = splits.sort((a, b) => a - b);
+            splits = splits.sort((a, b) => a - b);
 
-        let doDoubleSplit = false;
+            let doDoubleSplit = false;
 
-        for (let j = 0; j < opList.fnArray.length; j++) {
-            const fn = opList.fnArray[j];
-            const args = opList.argsArray[j];
+            for (let j = 0; j < opList.fnArray.length; j++) {
+                const fn = opList.fnArray[j];
+                const args = opList.argsArray[j];
 
-            switch (fn) {
-                case pdfjsLib.OPS.setStrokeRGBColor:
-                    r = parseInt(args[0].slice(1, 3), 16);
-                    g = parseInt(args[0].slice(3, 5), 16);
-                    b = parseInt(args[0].slice(5, 7), 16);
-                    break;
-                case 12:
-                    currentTransform = args;
-                    break;
+                switch (fn) {
+                    case pdfjsLib.OPS.setStrokeRGBColor:
+                        r = parseInt(args[0].slice(1, 3), 16);
+                        g = parseInt(args[0].slice(3, 5), 16);
+                        b = parseInt(args[0].slice(5, 7), 16);
+                        break;
+                    case 12:
+                        currentTransform = args;
+                        break;
 
-                case 91:
-                    if (
-                        args[2][0] === 0 &&
-                        args[2][1] === 0 &&
-                        Math.round(args[2][2]) === 510 &&
-                        args[2][3] === 0
-                    ) {
-                        if (r+g+b < 150) break;
-                        if (minX === 0) minX = pdfLeftToViewportLeft(currentTransform[4], viewport) / viewport.width
-                        if (maxX === 0) maxX = pdfLeftToViewportLeft(510 + currentTransform[4], viewport) / viewport.width;
+                    case 91:
+                        if (
+                            args[2][0] === 0 &&
+                            args[2][1] === 0 &&
+                            Math.round(args[2][2]) === 510 &&
+                            args[2][3] === 0
+                        ) {
+                            if (r+g+b < 150) break;
+                            if (minX === 0) minX = pdfLeftToViewportLeft(currentTransform[4], viewport) / viewport.width
+                            if (maxX === 0) maxX = pdfLeftToViewportLeft(510 + currentTransform[4], viewport) / viewport.width;
 
-                        const lineY = currentTransform[5]; // translation Y
-                        const viewportHeight = viewport.height;
-                        splitss.push((pdfTopToViewportTop(lineY, viewport) - epsilon) / viewportHeight);
-                        doDoubleSplit = true;
-                    }
-                    break;
+                            const lineY = currentTransform[5]; // translation Y
+                            const viewportHeight = viewport.height;
+                            splitss.push((pdfTopToViewportTop(lineY, viewport) - epsilon) / viewportHeight);
+                            doDoubleSplit = true;
+                        }
+                        break;
+                }
             }
-        }
-        splitss = splitss.sort((a, b) => a - b);
+            splitss = splitss.sort((a, b) => a - b);
 
-        pageSplits[i] = [...splits, ...splitss]
+            pageSplits[i] = [...splits, ...splitss]
+        }
+
+    }
+
+    if (board === 'ocr-mei' && !endTrue) {
+        pageSplits[pdf.numPages-1] = 1;
     }
 
     return [pageSplits, [minX, maxX], encoded];

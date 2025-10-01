@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Overlay Test</title>
+    <style>
+        #container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .pageWrapper {
+            position: relative;
+        }
+        .pdf-canvas {
+            display: block;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+
+</div>
+
+<script type="module">
+    import * as pdfjsLib from "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.mjs";
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs";
+
+    const url = "./papers/a-level-ocr-mei-further-maths-mechanics-minor-november-2021-qp.pdf"; // served over http
+
+    const scale = 1;
+
+    const pageSplits = {}
+    let fontName = ''
+    /** Remove any DOM-based text layers that PDF.js may insert */
+    function removeTextLayers() {
+        document.querySelectorAll(".textLayer").forEach(el => el.remove());
+    }
+
+    /**
+     * Convert a text item into a rectangle in viewport coordinates
+     * @param {Object} item - PDF.js text item
+     * @param {Object} viewport - PDF.js viewport
+     * @param {CanvasRenderingContext2D} ctx - context for measuring text
+     */
+    function getTextItemRect(item, viewport, ctx) {
+        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const fontHeight = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 12;
+        const baselineX = tx[4];
+        const baselineY = tx[5];
+
+        ctx.save();
+        ctx.font = `${fontHeight}px sans-serif`;
+        ctx.textBaseline = "alphabetic";
+        const width = ctx.measureText(item.str).width;
+        ctx.restore();
+
+        const left = baselineX;
+        const top = baselineY - fontHeight;
+
+        return { left, top, width, height: fontHeight };
+    }
+    function pdfRectToViewportRect(rect, viewport) {
+        const { left, top, width, height } = rect;
+
+        // bottom-left in PDF user space
+        const [vx1, vy1] = viewport.convertToViewportPoint(left, top);
+        // top-right in PDF user space
+        const [vx2, vy2] = viewport.convertToViewportPoint(left + width, top + height);
+
+        return {
+            left: Math.min(vx1, vx2),
+            top: Math.min(vy1, vy2),
+            width: Math.abs(vx2 - vx1),
+            height: Math.abs(vy2 - vy1),
+        };
+    }
+
+    /** Draw a highlight rectangle */
+    function drawHighlight(ctx, rect, color = "rgba(0,255,0,0.55)") {
+        const pad = Math.max(1, Math.round(Math.min(rect.width,rect.height) * 0.08));
+        console.log(rect)
+        ctx.fillStyle = "rgba(0,255,0,0.55)";
+        ctx.fillRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
+        // ctx.fillRect(0,0, 10,100);
+
+        ctx.strokeStyle = "rgba(200,140,0,0.2)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
+    }
+
+    async function findSpecialLines(page) {
+        const opList = await page.getOperatorList();
+        const results = [];
+
+        let currentTransform = [1, 0, 0, 1, 0, 0];
+        let currentColor = [0,0,0]
+
+        for (let i = 0; i < opList.fnArray.length; i++) {
+            const fn = opList.fnArray[i];
+            const args = opList.argsArray[i];
+
+            switch (fn) {
+                case pdfjsLib.OPS.setStrokeRGBColor:
+                    currentColor = [args[0], args[1], args[2]]
+                    break;
+                case 12: // cm
+                    currentTransform = args;
+                    break;
+
+                case 91: // rest of args
+                    // console.log(args[1])
+                    if (args[1][0] === 0 && args[1][1] === 0 && Math.round(args[1][2]) === 510 && args[1][3] === 0) {
+                        if (currentColor[0] + currentColor[1] + currentColor[2] < 300) break;
+                        // console.log('AA')
+                        // console.log(currentTransform)
+                        results.push({
+                            cm: currentTransform,
+                            moveTo: [0,0],
+                            lineTo: [510.236, 0]
+                        });
+                    }
+                    break;
+            }
+        }
+
+        return results;
+    }
+
+    let questionCounter = 1;
+    function findWhiteGaps(canvas, threshold = 250, minGapHeight = 100) {
+        const ctx = canvas.getContext("2d");
+        const { width, height } = canvas;
+        const imageData = ctx.getImageData(0, 0, width, height);
+
+        let whiteRuns = [];
+        let runStart = null;
+
+        for (let y = 0; y < height; y++) {
+            let rowWhite = true;
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                const r = imageData.data[idx];
+                const g = imageData.data[idx + 1];
+                const b = imageData.data[idx + 2];
+
+                if (r < threshold || g < threshold || b < threshold) {
+                    rowWhite = false;
+                    break;
+                }
+            }
+
+            if (rowWhite) {
+                if (runStart === null) runStart = y;
+            } else {
+                if (runStart !== null) {
+                    if (y - runStart >= minGapHeight) {
+                        whiteRuns.push({ from: runStart, to: y });
+                    }
+                    runStart = null;
+                }
+            }
+        }
+
+        // Handle last run
+        if (runStart !== null && height - runStart >= minGapHeight) {
+            whiteRuns.push({ from: runStart, to: height });
+        }
+
+        return whiteRuns;
+    }
+    let hasEnd = false
+    async function renderPage(pageNumber, pdfCanvas, overlay, ctxOverlay) {
+        removeTextLayers();
+
+        const pdf = await pdfjsLib.getDocument({url,
+            standardFontDataUrl: "https://unpkg.com/pdfjs-dist@4.3.136/standard_fonts/"
+        }).promise;
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale });
+
+        const specialLines = await findSpecialLines(page);
+
+        [pdfCanvas, overlay].forEach(c => {
+            c.width = viewport.width;
+            c.height = viewport.height;
+        });
+
+        console.log("pdf.js viewport height", viewport.height);
+
+        const ctx = pdfCanvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
+
+        const gaps = findWhiteGaps(pdfCanvas)
+        console.log(gaps)
+        // for (const gap of gaps) {
+        //     const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+        //     const rect = pdfRectToViewportRect(pdfRect, viewport);
+        //     rect.top = gap.from + 40
+        //     rect.height = gap.to-gap.from - 80;
+        //     drawHighlight(ctxOverlay, rect);
+        // }
+
+
+        const textContent = await page.getTextContent();
+
+        const endBound = 1
+        for (const item of textContent.items) {
+            const text = (item.str || "").toLowerCase();
+            if (text.includes('copyright information') && pageNumber >= pdf.numPages) {
+                const rect = getTextItemRect(item, viewport, ctxOverlay);
+                const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+                const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+                endBound = rect.top - 50;
+                drawHighlight(ctxOverlay, pdfRectt);
+            }
+            if (text.includes("end of question paper")) {
+                hasEnd = true;
+                console.log(item)
+                const rect = getTextItemRect(item, viewport, ctxOverlay);
+                const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+                const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+                pdfRectt.top = rect.top;
+                drawHighlight(ctxOverlay, pdfRectt);
+            }
+        }
+
+            if (pageNumber > 1) {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+
+                const cropX = 49;
+                const cropWidth = 5; // (50 - 10)
+                const cropHeight = canvas.height;
+
+                const pdfRect = { "left": 10, "top": 0, "width": .05, "height": 10000 };
+                const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+                pdfRectt.left = cropX
+                drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+
+                pdfRectt.left = cropX+cropWidth
+                drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+
+                const imageData = ctx.getImageData(cropX, 0, cropWidth, cropHeight);
+                const data = imageData.data;
+
+                function isBlack(r, g, b, a, threshold = 1) {
+                    if (a === 0) return false; // fully transparent, not black
+
+                    // Normalize brightness (0=black, 1=white)
+                    const brightness = (r + g + b) / (3 * 255);
+
+                    // Accept if brightness is below (1 - threshold)
+                    return brightness <= (1 - threshold);
+                }
+                const blackYs = [];
+                let lastY = -Infinity; // Start with a very negative number
+
+                for (let y = 0; y < cropHeight; y++) {
+                    let foundInRow = false;
+
+                    for (let x = 0; x < cropWidth; x++) {
+                        const idx = (y * cropWidth + x) * 4; // RGBA
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+                        const a = data[idx + 3];
+
+                        if (isBlack(r, g, b, a, 0.80)) {
+                            // Only count this if it's far enough from the last recorded Y
+                            if (y - lastY >= 10) {
+                                blackYs.push(y);
+                                lastY = y;
+                            }
+                            foundInRow = true;
+                            break; // No need to keep scanning the rest of this row
+                        }
+                    }
+                }
+
+                console.log("Black pixel Y positions:", blackYs);
+
+                for (const y of blackYs) {
+                    const pdfRect2 = { "left": 0, "top": cropHeight - y + 8, "width": 1000, "height": 0.5 };
+                    const pdfRectt2 = pdfRectToViewportRect(pdfRect2, viewport);
+                    drawHighlight(ctxOverlay, pdfRectt2);
+                }
+            }
+
+    }
+
+    async function renderPages() {
+        const pdf = await pdfjsLib.getDocument({url,
+            standardFontDataUrl: "https://unpkg.com/pdfjs-dist@4.3.136/standard_fonts/"
+        }).promise;
+        for (let i = 0; i < pdf.numPages ; i++) {
+            // for (let i = 0; i < 1; i++) {
+            const pageWrapper = document.createElement("div");
+            pageWrapper.className = "pageWrapper";
+            const pdfCanvas = document.createElement("canvas");
+            pdfCanvas.id = "pdf-canvas-" + i;
+            pdfCanvas.className = "pdf-canvas";
+            const overlay = document.createElement("canvas");
+            overlay.id = "overlay-" + i;
+            overlay.className = "overlay";
+            const ctxOverlay = overlay.getContext("2d");
+
+            pageWrapper.appendChild(overlay);
+            pageWrapper.appendChild(pdfCanvas);
+            document.getElementById("container").appendChild(pageWrapper);
+
+
+
+            await renderPage(i+1, pdfCanvas, overlay, ctxOverlay)
+        }
+
+    }
+
+    renderPages().then(() => {
+        console.log(pageSplits)
+    }).catch(err => {
+        console.error(err);
+    });
+</script>
+</body>
+</html>

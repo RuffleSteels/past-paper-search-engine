@@ -9,9 +9,13 @@ function parsePaperUrl(url) {
     const decoded = decodeURIComponent(url);
 
     // Capture subject, level, and the rest of the path
-    const re = /download\/(?<subject>[^/]+)\/(?<level>[^/]+)\/Past-Papers\/(?<board>[^/]+)\/(?<paper>[^/]+)\/(?<docType>[^/]+)\/(?<filename>[^/]+)$/i;
-    const m = decoded.match(re);
-    if (!m) return null;
+    let re = /download\/(?<subject>[^/]+)\/(?<level>[^/]+)\/Past-Papers\/(?<board>[^/]+)\/(?<paper>[^/]+)\/(?<docType>[^/]+)\/(?<filename>[^/]+)$/i;
+    let m = decoded.match(re);
+    if (!m) {
+        re = /download\/(?<subject>[^/]+)\/(?<level>[^/]+)\/Papers\/(?<board>[^/]+)\/(?<paper>[^/]+)\/(?<docType>[^/]+)\/(?<filename>[^/]+)$/i;
+        m = decoded.match(re);
+        if (!m) return null;
+    }
 
     const { subject, level, board, paper, docType, filename } = m.groups;
 
@@ -62,27 +66,31 @@ async function downloadPDF(url, outputPath) {
 
 async function scrape() {
     const folder = path.resolve("./papers");
-    const res = await fetch("https://www.physicsandmathstutor.com/past-papers/gcse-maths/");
+    const res = await fetch("https://www.physicsandmathstutor.com/maths-revision/a-level-ocr-mei/papers-further/");
     const html = await res.text();
 
     const dom = new JSDOM(html);
     const document = dom.window.document;
 
-    const results = [];
+    const results = [
+        'https://www.physicsandmathstutor.com/maths-revision/a-level-ocr-mei/papers-further/'
+    ];
 
-    document.querySelectorAll(".post-entry .dropshadowboxes-container").forEach(container => {
-        const parent = container.parentNode // get parent div of container
-        if (parent && parent.textContent.includes("Edexcel")) {
-            parent.querySelectorAll("a").forEach(a => {
-                const parts = a.href.split('/');
-                const last = parts.filter(Boolean).pop();
-                if (!results.includes(a.href) && (last.split('-')[1].includes('paper')))
-                    results.push(
-                         a.href
-                    );
-            });
-        }
-    });
+    if (results.length === 0) {
+        document.querySelectorAll(".post-entry .dropshadowboxes-container").forEach(container => {
+            const parent = container.parentNode // get parent div of container
+            if (parent && parent.textContent.includes("Edexcel")) {
+                parent.querySelectorAll("a").forEach(a => {
+                    const parts = a.href.split('/');
+                    const last = parts.filter(Boolean).pop();
+                    if (!results.includes(a.href) && (last.split('-')[1].includes('paper')))
+                        results.push(
+                            a.href
+                        );
+                });
+            }
+        });
+    }
 
     const links = []
 
@@ -99,7 +107,7 @@ async function scrape() {
         const questionPapersDiv = Array.from(body.querySelectorAll('*'))
 
         for (let div of questionPapersDiv) {
-            if (div.textContent.includes("QP") && !div.textContent.includes("Mock")) {
+            if (div.textContent.includes("MS") && !div.textContent.includes("Mock")) {
                 if (div.href && !links.includes(div.href))
                 links.push(div.href);
             }
@@ -118,7 +126,7 @@ async function scrape() {
         if (success) {
             await prisma.examPaper.upsert({
                 where: { path: outputPath },
-                update: {}, // do nothing if already exists
+                update: {},
                 create: {
                     examBoard: board.toLowerCase(),
                     subject: subject.toLowerCase(),

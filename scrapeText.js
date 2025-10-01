@@ -55,19 +55,37 @@ console.warn = function (...args) {
 };
 
 async function main() {
-    await prisma.questionText.deleteMany()
+
     const where =         {
         document: 'qp',
-        examBoard: 'edexcel',
-        subject: 'physics',
+        examBoard: 'ocr-mei-further',
+        subject: 'maths',
         // paper: 'paper-1',
-        // year: 2017
+        // year: 2017\
+        paper: {
+            in: [
+                'mechanics-minor',
+                'mechanics-major',
+                'statistics-major',
+                'pure-core',
+                'statistics-minor'
+            ]
+        },
     }
 
     const questions = await prisma.examQuestion.findMany({
         where
     })
+    const questionIds = questions.map(eq => eq.id);
 
+// step 2: delete linked QuestionTexts
+    if (questionIds.length > 0) {
+        await prisma.questionText.deleteMany({
+            where: {
+                questionId: { in: questionIds },
+            },
+        });
+    }
     for (const question of questions) {
         const {path, id, encoded} = question
 

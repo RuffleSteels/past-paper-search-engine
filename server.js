@@ -18,7 +18,7 @@ app.get('/api/search', async (req, res) => {
         subject: rawFilters.subject || [],
         paper: rawFilters.paper || [],
         year: rawFilters.year ? rawFilters.year.map(Number).filter(y => !isNaN(y)) : [],
-        document: rawFilters.paper || [],
+        document: rawFilters.document || [],
         label: rawFilters.label || [],
     };
 
@@ -80,6 +80,11 @@ async function getDistinctValues(fields) {
     for (const field of fields) {
         const values = await prisma.examQuestion.groupBy({
             by: [field],
+            where: {
+                QuestionText: {
+                    isNot: null // only examQuestions WITH a linked QuestionText
+                },
+            },
         });
 
         result[field] = values.map(v => v[field]);

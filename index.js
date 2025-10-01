@@ -25,14 +25,34 @@ async function processPaper(paperr) {
     await fs.mkdir("./merged", { recursive: true });
     const fileBytes = await fs.readFile(pdfPath);
     const srcDoc = await PDFDocument.load(fileBytes);
-    const result = await extractPageSplits(pdfPath, srcDoc);
+    const result = await extractPageSplits(pdfPath, srcDoc, examBoard);
     const pageSplits= result[0]
     const minX = result[1][0]
     const maxX = result[1][1]
     const encoded = result[2]
-
+    let clips = []
     // generate clips
-    const clips = buildClips(pageSplits);
+    if (examBoard !== 'edexcel') {
+        let prev = 0;
+        let prevPage = 0
+        for (const split in pageSplits) {
+            for (const num of pageSplits[split]) {
+                if (prev !== 0) {
+                    clips.push({
+                        startPage: prevPage,
+                        startY: prev,
+                        endPage: split,
+                        endY: num,
+                    })
+                }
+                prev = num
+                prevPage = split
+            }
+        }
+    } else {
+        clips = buildClips(pageSplits);
+    }
+
 
     console.log(clips)
     // stitch each clip and insert into DB
@@ -221,12 +241,20 @@ async function processMs(paperr) {
 
 async function main() {
     // fetch list of exam papers from DB
+
     const where =         {
-        document: 'ms',
-            examBoard: 'edexcel',
-            subject: 'physics',
-        // paper: 'paper-1',
-        // label: 'specimen'
+        document: 'qp',
+            examBoard: 'ocr-mei-further',
+            subject: 'maths',
+        paper: {
+            in: [
+                'mechanics-minor',
+                'mechanics-major',
+                'statistics-major',
+                'pure-core',
+                'statistics-minor'
+            ]
+        },
     }
     const papers = await prisma.examPaper.findMany({
         where
@@ -235,10 +263,10 @@ async function main() {
     await prisma.examQuestion.deleteMany({
         where
     })
-    //
+    console.log(papers)
     for (const paper of papers) {
         try {
-            await processMs(paper);
+            await processPaper(paper);
         } catch (err) {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }
