@@ -18,6 +18,8 @@ app.get('/api/search', async (req, res) => {
         subject: rawFilters.subject || [],
         paper: rawFilters.paper || [],
         year: rawFilters.year ? rawFilters.year.map(Number).filter(y => !isNaN(y)) : [],
+        document: rawFilters.paper || [],
+        label: rawFilters.label || [],
     };
 
     const where = {
@@ -32,6 +34,8 @@ app.get('/api/search', async (req, res) => {
                 ? { in: filters.paper.filter(p => p !== null) }
                 : undefined,
             year: filters.year.length ? { in: filters.year } : undefined,
+            document: filters.document.length ? { in: filters.document } : undefined,
+            label: filters.label.length ? { in: filters.label } : undefined,
         },
     };
 
@@ -49,6 +53,7 @@ app.get('/api/search', async (req, res) => {
                     paper: true,
                     document: true,
                     question: true,
+                    label: true,
                 },
             },
         },
@@ -84,8 +89,8 @@ async function getDistinctValues(fields) {
 }
 
 app.get('/api/filters', async (req, res) => {
-    const distinct = await getDistinctValues(['examBoard', 'subject', 'paper', 'year']);
-
+    const distinct = await getDistinctValues(['examBoard', 'subject', 'paper', 'year', 'document', 'label']);
+    distinct.year = distinct.year.filter(y=>y)
     res.json({success: true, data:distinct});
 });
 app.use('/question', express.static('./merged'));

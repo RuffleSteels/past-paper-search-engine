@@ -272,7 +272,7 @@ function fullSize(e) {
     container.classList.toggle("fullSize")
 }
 async function renderQuestion(data, query, q) {
-    const { path, examBoard, paper, subject, year, question } = data;
+    const { path, examBoard, paper, label, subject, year, question } = data;
     const pdf = await pdfjsLib.getDocument('preview/' + path).promise;
     pdfDocument = pdf;
 
@@ -282,7 +282,7 @@ async function renderQuestion(data, query, q) {
     wrapper.innerHTML = `
     <div class="questionTitle">
         <h4 class="subheader">
-        ${year} ${paper} Q${question}
+        ${label} ${year ? year : ''} ${paper} Q${question}
         </h4>        <a href="${'question/' + path.split('.')[0] + '-ms.pdf'}" target="_blank" rel="noopener noreferrer">
             <h3>
                 MS
@@ -603,6 +603,8 @@ async function fetchFilters() {
             currentFilter[field] = []
         }
         window.currentFilters = currentFilter
+        console.log(window.currentFilters)
+        console.log(window.distinct)
         updateFilters()
     }
 }
