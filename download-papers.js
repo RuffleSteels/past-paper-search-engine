@@ -61,7 +61,7 @@ async function main() {
     for (const year of years) {
         for (const paper of papers) {
             const pdfLink = `https://pmt.physicsandmathstutor.com/download/${subject}/A-level/Past-Papers/${examBoard}/${paper}/QP/June%20${year}%20QP.pdf`;
-            const filename = `${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${year}-qp.pdf`;
+            const filename = `a-level-${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-june-${year}-qp.pdf`;
             const outputPath = path.join(folder, filename);
 
             console.log(`⬇️ Downloading: ${pdfLink}`);
@@ -72,11 +72,13 @@ async function main() {
                     where: { path: outputPath },
                     update: {}, // do nothing if already exists
                     create: {
+                        level: 'a-level',
                         examBoard: examBoard.toLowerCase(),
                         subject: subject.toLowerCase(),
                         paper: paper.toLowerCase(),
-                        year,
+                        year: year,
                         document: 'qp',
+                        label: 'june',
                         path: outputPath,
                     },
                 });

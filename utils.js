@@ -108,7 +108,7 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
 export async function extractPageSplits(pdfPath, srcDoc) {
     const newDoc = await PDFDocument.create();
     const [srcPage] = await newDoc.copyPages(srcDoc, [1]);
-
+    let encoded = false;
     const fileData = new Uint8Array(await fs.readFile(pdfPath));
     const pdf = await pdfjsLib.getDocument({ data: fileData }).promise;
 
@@ -128,7 +128,7 @@ export async function extractPageSplits(pdfPath, srcDoc) {
         let splits = [];
         let splitss = []
 
-        let currentTransform = [1, 0, 0, 1, 0, 0]; // default CTM
+        let currentTransform = [1, 0, 0, 1, 0, 0];
 
         let r = 0;
         let g = 0;
@@ -145,24 +145,79 @@ export async function extractPageSplits(pdfPath, srcDoc) {
             }
         }
 
-        for (const item of textContent.items) {
-            const text = (item.str || "").toLowerCase();
+        if (fontName === '') {
+            encoded = true
+            const { canvas, viewport } = await renderPageToCanvas(pdfPath, i, 1.0);
 
-            if (item.fontName) {
-                const cleaned = text.replace(/[* ]/g, "");
-                if (/^-?\d+$/.test(cleaned)) {
-                    if (parseInt(cleaned, 10) === questionCounter) {
+            const ctx = canvas.getContext("2d");
 
-                        const viewportHeight = viewport.height;
-                        const rect = getTextItemRect(item, viewport, ctx);
-                        if (rect.left > 46) continue;
-                        questionCounter++;
-                        splits.push((rect.top - epsilon) / viewportHeight);
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({canvasContext: ctx, viewport}).promise;
+
+            const cropX = 42;
+            const cropWidth = 4;
+            const cropHeight = canvas.height;
+
+            const imageData = ctx.getImageData(cropX, 0, cropWidth, cropHeight);
+            const data = imageData.data;
+
+            function isBlack(r, g, b, a) {
+                return a > 0 && r < 30 && g < 30 && b < 30;
+            }
+
+            const blackYs = [];
+            let lastY = -Infinity; // Start with a very negative number
+
+            for (let y = 0; y < cropHeight; y++) {
+                let foundInRow = false;
+
+                for (let x = 0; x < cropWidth; x++) {
+                    const idx = (y * cropWidth + x) * 4; // RGBA
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    const a = data[idx + 3];
+
+                    if (isBlack(r, g, b, a)) {
+                        if (y - lastY >= 10) {
+                            blackYs.push(y);
+                            lastY = y;
+                        }
+                        foundInRow = true;
+                        break;
+                    }
+                }
+            }
+
+            console.log("Black pixel Y positions:", blackYs, i);
+
+            for (const y of blackYs) {
+
+                splits.push((y - 8 - epsilon) / viewport.height);
+            }
+        } else {
+            for (const item of textContent.items) {
+                const text = (item.str || "").toLowerCase();
+                if (item.fontName) {
+                    const cleaned = text.replace(/[* ]/g, "");
+                    if (/^-?\d+$/.test(cleaned)) {
+                        if (parseInt(cleaned, 10) === questionCounter) {
+                            const viewportHeight = viewport.height;
+                            const rect = getTextItemRect(item, viewport, ctx);
+                            if (rect.left > 46) continue;
+                            questionCounter++;
+                            splits.push((rect.top - epsilon) / viewportHeight);
+                        }
                     }
                 }
             }
         }
+
         splits = splits.sort((a, b) => a - b);
+
+        let doDoubleSplit = false;
 
         for (let j = 0; j < opList.fnArray.length; j++) {
             const fn = opList.fnArray[j];
@@ -174,18 +229,17 @@ export async function extractPageSplits(pdfPath, srcDoc) {
                     g = parseInt(args[0].slice(3, 5), 16);
                     b = parseInt(args[0].slice(5, 7), 16);
                     break;
-                case 12: // cm
+                case 12:
                     currentTransform = args;
                     break;
 
-                case 91: // like fn=91
+                case 91:
                     if (
                         args[2][0] === 0 &&
                         args[2][1] === 0 &&
                         Math.round(args[2][2]) === 510 &&
                         args[2][3] === 0
                     ) {
-                        // console.log(r,g,b)
                         if (r+g+b < 150) break;
                         if (minX === 0) minX = pdfLeftToViewportLeft(currentTransform[4], viewport) / viewport.width
                         if (maxX === 0) maxX = pdfLeftToViewportLeft(510 + currentTransform[4], viewport) / viewport.width;
@@ -193,6 +247,7 @@ export async function extractPageSplits(pdfPath, srcDoc) {
                         const lineY = currentTransform[5]; // translation Y
                         const viewportHeight = viewport.height;
                         splitss.push((pdfTopToViewportTop(lineY, viewport) - epsilon) / viewportHeight);
+                        doDoubleSplit = true;
                     }
                     break;
             }
@@ -202,7 +257,7 @@ export async function extractPageSplits(pdfPath, srcDoc) {
         pageSplits[i] = [...splits, ...splitss]
     }
 
-    return [pageSplits, [minX, maxX]];
+    return [pageSplits, [minX, maxX], encoded];
 }
 
 export function buildClips(pageDict) {
@@ -526,8 +581,8 @@ export async function stitchClip(srcDoc, clip, outPath, outPath2, minXp, maxXp, 
     await fs.writeFile(outPath, outBytes);
 
     if (!isMs) {
-        await removeWhiteBands(outPath, outPath);
-        await stackPdfVertically(outPath, outPath2);
+        // await removeWhiteBands(outPath, outPath);
+        // await stackPdfVertically(outPath, outPath2);
     }
 
     console.log("✅ Saved", outPath);

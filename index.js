@@ -14,10 +14,11 @@ import {
 const prisma = new PrismaClient();
 const outDir = "./out";
 
-async function processPaper(paper) {
-    const { examBoard, subject, paper: paperType, year, path: pdfPath } = paper;
+async function processPaper(paperr) {
+    const { examBoard, label, level, document, subject, paper, year, path: pdfPath } = paperr;
 
-    console.log(`📄 Processing ${examBoard}-${subject}-${paperType}-${year}`);
+    const filename = `${level.toLowerCase()}-${examBoard.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${label.trim().replace(/\s+/g, '-').toLowerCase()}${year ? `-${year}` : ''}-${document.toLowerCase()}`
+    console.log(`📄 Processing ${filename}.pdf`);
 
     // make sure output dir exists
     await fs.mkdir(outDir, { recursive: true });
@@ -28,6 +29,7 @@ async function processPaper(paper) {
     const pageSplits= result[0]
     const minX = result[1][0]
     const maxX = result[1][1]
+    const encoded = result[2]
 
     // generate clips
     const clips = buildClips(pageSplits);
@@ -38,11 +40,11 @@ async function processPaper(paper) {
         const clip = clips[i];
         const outPath = path.join(
             outDir,
-            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
+            `${filename}-Q${i + 1}.pdf`
         );
         const outPath2 = path.join(
             "./merged",
-            `${examBoard}-${subject}-${paperType}-${year}-Q${i + 1}.pdf`
+            `${filename}-Q${i + 1}.pdf`
         );
 
         await stitchClip(srcDoc, clip, outPath, outPath2, minX, maxX);
@@ -53,11 +55,14 @@ async function processPaper(paper) {
             create: {
                 examBoard,
                 subject,
-                paper: paperType,
+                paper: paper,
                 year: parseInt(year),
                 path: outPath,
-                document: 'qp',
+                document: document,
                 question: i + 1,
+                level: level,
+                label: label,
+                encoded
             },
         });
 
@@ -214,8 +219,8 @@ async function main() {
         document: 'qp',
             examBoard: 'edexcel',
             subject: 'physics',
-        // paper: 'paper-2',
-        // year: 2023
+        // paper: 'paper-3',
+        // label: 'specimen'
     }
     const papers = await prisma.examPaper.findMany({
         where

@@ -4,10 +4,11 @@ const prisma = new PrismaClient();
 
 const app = express();
 const PORT = 3000;
-
+app.set("query parser", "simple");
 app.use(express.static('public'));
 app.get('/api/search', async (req, res) => {
     const page = Number(req.query.p) || 1;
+
     const rawFilters = req.query.f ? JSON.parse(req.query.f) : {};
     const pageSize = 10;
 

@@ -19,7 +19,9 @@ model ExamPaper {
   examBoard String
   subject   String
   paper     String
-  year      Int
+  year      Int?
+  label     String
+  level     String
   document  String
   path      String @unique
 }
@@ -29,9 +31,12 @@ model ExamQuestion {
   examBoard    String
   subject      String
   paper        String
-  year         Int
+  year         Int?
+  label        String
+  level        String
   question     Int
   document     String
+  encoded      Boolean
   path         String        @unique
   QuestionText QuestionText?
 }

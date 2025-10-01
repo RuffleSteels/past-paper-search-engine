@@ -405,11 +405,10 @@ let pageNum = 1;
 let maxPages = 1;
 
 async function search(input = true, page = 1) {
-    const query = document.getElementById('search').value.trim();
+    const query = document.getElementById('search').value;
 
-    // ✅ Clear immediately if empty
     if (query === '') {
-        stop = true;  // <-- set stop
+        stop = true;
         if (controller) controller.abort();
         pageNum = 1
         maxPages = 1
@@ -425,10 +424,8 @@ async function search(input = true, page = 1) {
         return;
     }
 
-    // reset stop flag since we have a query now
     stop = false;
 
-    // ✅ Abort any previous search
     if (controller) controller.abort();
     controller = new AbortController();
     const signal = controller.signal;
@@ -439,15 +436,12 @@ async function search(input = true, page = 1) {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}&f=${encodeURIComponent(JSON.stringify(window.currentFilters))}`, { signal });
         const data = await res.json();
 
-        // ✅ Ignore outdated responses
         if (searchId !== currentSearchId) return;
 
-        // Clear results before showing new ones
         document.getElementById('results').innerHTML = '';
 
         if (data.success && data.data.length > 0) {
             if (input) {
-
                 pageNum = 1;
                 maxPages = data?.totalPages || 1;
                 document.querySelector('#resultsNum').innerHTML =data?.totalCount || 1
@@ -466,7 +460,6 @@ async function search(input = true, page = 1) {
                     document.getElementById('results').innerHTML = '';
                     return;
                 }
-                // Don’t await here → just push the promise
                 promises.push(renderQuestion(data.data[i], query, i));
             }
 
