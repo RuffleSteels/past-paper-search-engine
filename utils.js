@@ -451,7 +451,7 @@ export async function extractPageSplits(pdfPath, srcDoc, board) {
 
             pageSplits[i] = [...splits, ...splitss]
         }
-
+        pdf.destroy();
     }
 
     if (board.includes('ocr') && !endTrue) {
