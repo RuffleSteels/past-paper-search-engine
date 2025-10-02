@@ -98,7 +98,7 @@
 // // }
 
 
-
+let prefix = ''
 let PAGE_HEIGHT;
 let pdfDocument;
 const DEFAULT_SCALE = 1.33;
@@ -433,7 +433,7 @@ async function search(input = true, page = 1) {
     const searchId = ++currentSearchId;
 
     try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&p=${page}&f=${encodeURIComponent(JSON.stringify(window.currentFilters))}`, { signal });
+        const res = await fetch(`${prefix}/api/search?q=${encodeURIComponent(query)}&p=${page}&f=${encodeURIComponent(JSON.stringify(window.currentFilters))}`, { signal });
         const data = await res.json();
 
         if (searchId !== currentSearchId) return;
@@ -598,7 +598,7 @@ async function updateFilters(doSearch = true, first = false) {
 window.currentFilters = {}
 async function fetchFilters(update=true, first = false) {
     console.log(window.currentFilters)
-    const res = await fetch(`/api/filters?c=${encodeURIComponent(JSON.stringify(window.currentFilters))}`);
+    const res = await fetch(`${prefix}/api/filters?c=${encodeURIComponent(JSON.stringify(window.currentFilters))}`);
     const data = await res.json();
 
     console.log(data)

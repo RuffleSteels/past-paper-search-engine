@@ -3,7 +3,7 @@ import { PrismaClient } from "./generated/prisma/index.js";
 const prisma = new PrismaClient();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.set("query parser", "simple");
 app.use(express.static('public'));
 app.get('/api/search', async (req, res) => {
