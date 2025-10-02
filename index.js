@@ -277,8 +277,8 @@ async function main() {
         document: 'ms',
         examBoard: 'ocr-a',
         subject: 'biology',
-        // paper: 'paper-1',
-        // year: null,
+        paper: 'paper-1',
+        year: 2022,
     }
     const papers = await prisma.examPaper.findMany({
         where

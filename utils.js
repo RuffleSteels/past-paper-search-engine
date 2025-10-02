@@ -67,7 +67,7 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
         for (const item of textContent.items) {
             const text = (item.str || "").toLowerCase();
 
-            if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctx).left < 100 ) {
+            if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctx).left < 80 ) {
                 const clean = text.replace(/\D/g, "")
                 console.log(clean)
                 if (parseInt(clean) === questionCounter) {
