@@ -274,10 +274,10 @@ async function main() {
     //     },
     // }
     const where =         {
-        document: 'qp',
+        document: 'ms',
         examBoard: 'ocr-a',
         subject: 'biology',
-        // paper: 'paper-3',
+        // paper: 'paper-1',
         // year: null,
     }
     const papers = await prisma.examPaper.findMany({
@@ -290,7 +290,7 @@ async function main() {
     console.log(papers)
     for (const paper of papers) {
         try {
-            await processPaper(paper);
+            await processMs(paper);
         } catch (err) {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }
