@@ -34,7 +34,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.mjs";
 
-    const url = "./papers/a-level-ocr-mei-further-maths-mechanics-minor-november-2021-qp.pdf"; // served over http
+    const url = "./papers/a-level-ocr-a-biology-paper-3-specimen-qp.pdf"; // served over http
 
     const scale = 1;
 
@@ -44,7 +44,10 @@
     function removeTextLayers() {
         document.querySelectorAll(".textLayer").forEach(el => el.remove());
     }
-
+    function isValidString(str) {
+        const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?)\**)*\s*$/i;
+        return regex.test(str.replace(/\s+/g, ''));
+    }
     /**
      * Convert a text item into a rectangle in viewport coordinates
      * @param {Object} item - PDF.js text item
@@ -187,8 +190,6 @@
         const page = await pdf.getPage(pageNumber);
         const viewport = page.getViewport({ scale });
 
-        const specialLines = await findSpecialLines(page);
-
         [pdfCanvas, overlay].forEach(c => {
             c.width = viewport.width;
             c.height = viewport.height;
@@ -201,22 +202,40 @@
 
         ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
 
-        const gaps = findWhiteGaps(pdfCanvas)
-        console.log(gaps)
-        // for (const gap of gaps) {
-        //     const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
-        //     const rect = pdfRectToViewportRect(pdfRect, viewport);
-        //     rect.top = gap.from + 40
-        //     rect.height = gap.to-gap.from - 80;
-        //     drawHighlight(ctxOverlay, rect);
-        // }
-
+        if (pageNumber <= 1) {
+            for (let i = 0; i < pdf.numPages ; i++) {
+                const pdf2= await pdfjsLib.getDocument({url,
+                    standardFontDataUrl: "https://unpkg.com/pdfjs-dist@4.3.136/standard_fonts/"
+                }).promise;
+                const page2 = await pdf2.getPage(i+1);
+                const textContent = await page2.getTextContent();
+                if (fontName === '') {
+                    for (const item of textContent.items) {
+                        const text = (item.str || "").toLowerCase();
+                        if (text.includes("end of question paper")) {
+                            fontName = item.fontName;
+                            console.log(item)
+                        }
+                    }
+                }
+            }
+        }
 
         const textContent = await page.getTextContent();
 
         const endBound = 1
         for (const item of textContent.items) {
             const text = (item.str || "").toLowerCase();
+            // console.log(item)
+            if (isValidString(text.trim()) && item.fontName.includes(fontName === '' ? '_f1' : fontName.split('_')[2]) && getTextItemRect(item, viewport, ctxOverlay).left < 100) {
+                const rect = getTextItemRect(item, viewport, ctxOverlay);
+                const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
+                const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+                pdfRectt.top = rect.top;
+                drawHighlight(ctxOverlay, pdfRectt);
+                questionCounter++
+                console.log(item)
+            }
             if (text.includes('copyright information') && pageNumber >= pdf.numPages) {
                 const rect = getTextItemRect(item, viewport, ctxOverlay);
                 const pdfRect = { "left": 0, "top": 0, "width": 620, "height": 0 };
@@ -234,73 +253,106 @@
                 drawHighlight(ctxOverlay, pdfRectt);
             }
         }
-
-            if (pageNumber > 1) {
-                const canvas = document.createElement("canvas");
-                const ctx = canvas.getContext("2d");
-
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-
-                await page.render({ canvasContext: ctx, viewport }).promise;
-
-                const cropX = 49;
-                const cropWidth = 5; // (50 - 10)
-                const cropHeight = canvas.height;
-
-                const pdfRect = { "left": 10, "top": 0, "width": .05, "height": 10000 };
-                const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
-                pdfRectt.left = cropX
-                drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
-
-                pdfRectt.left = cropX+cropWidth
-                drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
-
-                const imageData = ctx.getImageData(cropX, 0, cropWidth, cropHeight);
-                const data = imageData.data;
-
-                function isBlack(r, g, b, a, threshold = 1) {
-                    if (a === 0) return false; // fully transparent, not black
-
-                    // Normalize brightness (0=black, 1=white)
-                    const brightness = (r + g + b) / (3 * 255);
-
-                    // Accept if brightness is below (1 - threshold)
-                    return brightness <= (1 - threshold);
-                }
-                const blackYs = [];
-                let lastY = -Infinity; // Start with a very negative number
-
-                for (let y = 0; y < cropHeight; y++) {
-                    let foundInRow = false;
-
-                    for (let x = 0; x < cropWidth; x++) {
-                        const idx = (y * cropWidth + x) * 4; // RGBA
-                        const r = data[idx];
-                        const g = data[idx + 1];
-                        const b = data[idx + 2];
-                        const a = data[idx + 3];
-
-                        if (isBlack(r, g, b, a, 0.80)) {
-                            // Only count this if it's far enough from the last recorded Y
-                            if (y - lastY >= 10) {
-                                blackYs.push(y);
-                                lastY = y;
-                            }
-                            foundInRow = true;
-                            break; // No need to keep scanning the rest of this row
-                        }
-                    }
-                }
-
-                console.log("Black pixel Y positions:", blackYs);
-
-                for (const y of blackYs) {
-                    const pdfRect2 = { "left": 0, "top": cropHeight - y + 8, "width": 1000, "height": 0.5 };
-                    const pdfRectt2 = pdfRectToViewportRect(pdfRect2, viewport);
-                    drawHighlight(ctxOverlay, pdfRectt2);
-                }
-            }
+            //
+            // if (pageNumber > 1) {
+            //     const canvas = document.createElement("canvas");
+            //     const ctx = canvas.getContext("2d");
+            //
+            //     canvas.width = viewport.width;
+            //     canvas.height = viewport.height;
+            //
+            //     await page.render({ canvasContext: ctx, viewport }).promise;
+            //
+            //     const cropX = 49;
+            //     const cropWidth = 5; // (50 - 10)
+            //     const cropHeight = canvas.height;
+            //
+            //     const pdfRect = { "left": 10, "top": 0, "width": .05, "height": 10000 };
+            //     const pdfRectt = pdfRectToViewportRect(pdfRect, viewport);
+            //     pdfRectt.left = cropX
+            //     drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+            //
+            //     pdfRectt.left = cropX+cropWidth
+            //     drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+            //
+            //     pdfRectt.left = 63
+            //     drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+            //
+            //
+            //     pdfRectt.left = 63 + 6
+            //     drawHighlight(ctxOverlay, pdfRectt, pageNumber, viewport.height);
+            //
+            //     const imageData = ctx.getImageData(cropX, 0, cropWidth, cropHeight);
+            //     const data = imageData.data;
+            //
+            //     function isBlack(r, g, b, a, threshold = 1) {
+            //         if (a === 0) return false;
+            //         const brightness = (r + g + b) / (3 * 255);
+            //         return brightness <= (1 - threshold);
+            //     }
+            //
+            //     const cropX2 = 63;
+            //     const cropWidth2 = 6;
+            //     const imageData2 = ctx.getImageData(cropX2, 0, cropWidth2, cropHeight);
+            //     const data2 = imageData2.data;
+            //     const blackYs = [];
+            //     let lastY = -Infinity;
+            //
+            //     for (let y = 0; y < cropHeight; y++) {
+            //         let foundBlack = false;
+            //
+            //         // Scan left strip for black
+            //         for (let x = 0; x < cropWidth; x++) {
+            //             const idx = (y * cropWidth + x) * 4;
+            //             const r = data[idx];
+            //             const g = data[idx + 1];
+            //             const b = data[idx + 2];
+            //             const a = data[idx + 3];
+            //
+            //             if (isBlack(r, g, b, a, 0.80)) {
+            //                 foundBlack = true;
+            //                 break;
+            //             }
+            //         }
+            //
+            //         if (foundBlack && y - lastY >= 10) {
+            //             let blackAtX50 = false;
+            //
+            //             for (let dy = -10; dy <= 10; dy++) {
+            //                 const checkY = y + dy;
+            //                 if (checkY < 0 || checkY >= cropHeight) continue;
+            //
+            //                 for (let x2 = 0; x2 < cropWidth2; x2++) {
+            //                     const idx2 = (checkY * cropWidth2 + x2) * 4;
+            //                     const r2 = data2[idx2];
+            //                     const g2 = data2[idx2 + 1];
+            //                     const b2 = data2[idx2 + 2];
+            //                     const a2 = data2[idx2 + 3];
+            //
+            //                     if (isBlack(r2, g2, b2, a2, 0.80)) {
+            //                         blackAtX50 = true;
+            //                         break;
+            //                     }
+            //                 }
+            //
+            //                 if (blackAtX50) break;
+            //             }
+            //
+            //             if (!blackAtX50) {
+            //                 blackYs.push(y);
+            //                 lastY = y;
+            //             }
+            //         }
+            //     }
+            //
+            //     console.log("Black pixel Y positions:", blackYs);
+            //
+            //     for (const y of blackYs) {
+            //         const pdfRect2 = { "left": 0, "top": cropHeight - y + 8, "width": 1000, "height": 0.5 };
+            //         const pdfRectt2 = pdfRectToViewportRect(pdfRect2, viewport);
+            //         drawHighlight(ctxOverlay, pdfRectt2);
+            //     }
+            // }
 
     }
 

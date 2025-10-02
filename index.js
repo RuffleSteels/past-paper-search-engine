@@ -13,7 +13,22 @@ import {
 
 const prisma = new PrismaClient();
 const outDir = "./out";
+// Keep original log function
+const originalLog = console.log;
 
+console.log = function (...args) {
+    if (
+        args.some(a =>
+            typeof a === "string" &&
+            a.includes("UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided")
+        )
+    ) {
+        // Suppress this specific log
+        return;
+    }
+    // Otherwise, print as normal
+    originalLog.apply(console, args);
+};
 async function processPaper(paperr) {
     const { examBoard, label, level, document, subject, paper, year, path: pdfPath } = paperr;
 
@@ -29,9 +44,11 @@ async function processPaper(paperr) {
     const pageSplits= result[0]
     const minX = result[1][0]
     const maxX = result[1][1]
+    console.log(minX, maxX);
     const encoded = result[2]
     let clips = []
     // generate clips
+    console.log(pageSplits)
     if (examBoard !== 'edexcel') {
         let prev = 0;
         let prevPage = 0
@@ -242,19 +259,26 @@ async function processMs(paperr) {
 async function main() {
     // fetch list of exam papers from DB
 
+    // const where =         {
+    //     document: 'qp',
+    //         examBoard: 'ocr-mei-further',
+    //         subject: 'maths',
+    //     paper: {
+    //         in: [
+    //             'mechanics-minor',
+    //             'mechanics-major',
+    //             'statistics-major',
+    //             'pure-core',
+    //             'statistics-minor'
+    //         ]
+    //     },
+    // }
     const where =         {
         document: 'qp',
-            examBoard: 'ocr-mei-further',
-            subject: 'maths',
-        paper: {
-            in: [
-                'mechanics-minor',
-                'mechanics-major',
-                'statistics-major',
-                'pure-core',
-                'statistics-minor'
-            ]
-        },
+        examBoard: 'ocr-a',
+        subject: 'biology',
+        // paper: 'paper-3',
+        // year: null,
     }
     const papers = await prisma.examPaper.findMany({
         where

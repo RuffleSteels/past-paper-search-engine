@@ -73,7 +73,9 @@ async function scrape() {
     const document = dom.window.document;
 
     const results = [
-        'https://www.physicsandmathstutor.com/maths-revision/a-level-ocr-mei/papers-further/'
+        'https://www.physicsandmathstutor.com/past-papers/a-level-biology/ocr-a-paper-1/',
+        'https://www.physicsandmathstutor.com/past-papers/a-level-biology/ocr-a-paper-2/',
+        'https://www.physicsandmathstutor.com/past-papers/a-level-biology/ocr-a-paper-3/'
     ];
 
     if (results.length === 0) {
@@ -92,55 +94,59 @@ async function scrape() {
         });
     }
 
-    const links = []
+    for (const docType of ['QP', 'MS']) {
+        const links = []
 
-    for (const link of results) {
-        const res2 = await fetch(link);
+        for (const link of results) {
+            const res2 = await fetch(link);
 
-        const html2 = await res2.text();
+            const html2 = await res2.text();
 
-        const dom2 = new JSDOM(html2);
-        const document2 = dom2.window.document;
+            const dom2 = new JSDOM(html2);
+            const document2 = dom2.window.document;
 
-        const body = document2.querySelector('.post-entry');
+            const body = document2.querySelector('.post-entry');
 
-        const questionPapersDiv = Array.from(body.querySelectorAll('*'))
+            const questionPapersDiv = Array.from(body.querySelectorAll('*'))
 
-        for (let div of questionPapersDiv) {
-            if (div.textContent.includes("MS") && !div.textContent.includes("Mock")) {
-                if (div.href && !links.includes(div.href))
-                links.push(div.href);
+            for (let div of questionPapersDiv) {
+                if (div.textContent.includes(docType) && !div.textContent.includes("Mock")) {
+                    if (div.href && !links.includes(div.href))
+                        links.push(div.href);
+                }
+            }
+        }
+
+        for (const link of links) {
+            const {subject, level, board, paper, docType, label, year} = parsePaperUrl(link)
+
+            const filename = `${level.toLowerCase()}-${board.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${label.trim().replace(/\s+/g, '-').toLowerCase()}${year ? `-${year}` : ''}-${docType.toLowerCase()}.pdf`;
+            const outputPath = path.join(folder, filename);
+
+            console.log(`⬇️ Downloading: ${link}`);
+            const success = await downloadPDF(link, outputPath);
+
+            if (success) {
+                await prisma.examPaper.upsert({
+                    where: { path: outputPath },
+                    update: {},
+                    create: {
+                        examBoard: board.toLowerCase(),
+                        subject: subject.toLowerCase(),
+                        paper: paper.toLowerCase(),
+                        year: year ? parseInt(year) : null,
+                        document: docType.toLowerCase(),
+                        level: level.toLowerCase(),
+                        label: label.trim().replace(/\s+/g, '-').toLowerCase(),
+                        path: outputPath,
+                    },
+                });
+                console.log(`✅ Saved & inserted: ${filename}`);
             }
         }
     }
 
-    for (const link of links) {
-        const {subject, level, board, paper, docType, label, year} = parsePaperUrl(link)
 
-        const filename = `${level.toLowerCase()}-${board.toLowerCase()}-${subject.toLowerCase()}-${paper.toLowerCase()}-${label.trim().replace(/\s+/g, '-').toLowerCase()}${year ? `-${year}` : ''}-${docType.toLowerCase()}.pdf`;
-        const outputPath = path.join(folder, filename);
-
-        console.log(`⬇️ Downloading: ${link}`);
-        const success = await downloadPDF(link, outputPath);
-
-        if (success) {
-            await prisma.examPaper.upsert({
-                where: { path: outputPath },
-                update: {},
-                create: {
-                    examBoard: board.toLowerCase(),
-                    subject: subject.toLowerCase(),
-                    paper: paper.toLowerCase(),
-                    year: year ? parseInt(year) : null,
-                    document: docType.toLowerCase(),
-                    level: level.toLowerCase(),
-                    label: label.trim().replace(/\s+/g, '-').toLowerCase(),
-                    path: outputPath,
-                },
-            });
-            console.log(`✅ Saved & inserted: ${filename}`);
-        }
-    }
 }
 
 scrape();

@@ -72,19 +72,19 @@ async function main() {
 
     const where =         {
         document: 'qp',
-        examBoard: 'ocr-mei-further',
-        subject: 'maths',
+        examBoard: 'ocr-a',
+        subject: 'biology',
         // paper: 'paper-1',
         // year: 2017\
-        paper: {
-            in: [
-                'mechanics-minor',
-                'mechanics-major',
-                'statistics-major',
-                'pure-core',
-                'statistics-minor'
-            ]
-        },
+        // paper: {
+        //     in: [
+        //         'mechanics-minor',
+        //         'mechanics-major',
+        //         'statistics-major',
+        //         'pure-core',
+        //         'statistics-minor'
+        //     ]
+        // },
     }
 
     const questions = await prisma.examQuestion.findMany({
@@ -123,7 +123,13 @@ async function main() {
                 fullText += pageText + "\n"; // keep pages separated
             }
         }
-        const cleanedText = fullText.trim().replace(/\.{2,}/g, "").replace(/\s+/g, " ").trim()
+        const cleanedText = fullText
+            .trim()
+            .replace(/\.{2,}/g, "")          // remove long runs of dots
+            .replace(/\s+/g, " ")            // normalize spaces
+            .replace(/\u0000/g, "")          // remove null bytes
+            .replace(/[\x00-\x1F\x7F]/g, "") // optional: strip all control chars
+            .trim();
         await prisma.questionText.create({
             data: {
                 questionId: id,
