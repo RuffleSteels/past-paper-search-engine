@@ -275,9 +275,17 @@ async function main() {
     // }
     const where =         {
         document: 'ms',
-        examBoard: 'ocr-a',
-        subject: 'biology',
-        // paper: 'paper-1',
+        examBoard: 'ocr-mei-further',
+        subject: 'maths',
+            paper: {
+                in: [
+                    'mechanics-minor',
+                    'mechanics-major',
+                    'statistics-major',
+                    'pure-core',
+                    'statistics-minor'
+                ]
+            },
         // year: 2022,
     }
     const papers = await prisma.examPaper.findMany({
