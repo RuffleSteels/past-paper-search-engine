@@ -536,8 +536,10 @@ function cleanText(text) {
     }
     return text
 }
-function updateFilters(doSearch = true) {
+async function updateFilters(doSearch = true, first = false) {
     if (window?.distinct) {
+        if (!first) await fetchFilters(false)
+        console.log('update', window.distinct)
         const container = document.querySelector('.searchFilterContainer')
         container.innerHTML = ''
         for (let field in window.distinct) {
@@ -587,29 +589,34 @@ function updateFilters(doSearch = true) {
             `
             container.appendChild(newDiv);
         }
-        if (doSearch) search()
+        if (doSearch) {
+            // if (!first) fetchFilters(false)
+            search()
+        }
     }
 }
-
-async function fetchFilters() {
-    const res = await fetch(`/api/filters`);
+window.currentFilters = {}
+async function fetchFilters(update=true, first = false) {
+    console.log(window.currentFilters)
+    const res = await fetch(`/api/filters?c=${encodeURIComponent(JSON.stringify(window.currentFilters))}`);
     const data = await res.json();
+
+    console.log(data)
 
     if (data?.success) {
         window.distinct = data.data
 
         const currentFilter = {}
         for (let field in data.data) {
-            currentFilter[field] = []
+            currentFilter[field] = window.currentFilters[field] ? window.currentFilters[field].filter(i => data.data[field].includes(i)) : []
         }
         window.currentFilters = currentFilter
-        console.log(window.currentFilters)
-        console.log(window.distinct)
-        updateFilters()
+
+        if (update) updateFilters(true, first)
     }
 }
 
-fetchFilters()
+fetchFilters(true, true)
 
 function checkNav() {
     console.log(pageNum - 1)

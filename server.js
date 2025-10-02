@@ -74,27 +74,79 @@ app.get('/api/search', async (req, res) => {
         data: pdfNames
     });
 });
-async function getDistinctValues(fields) {
+async function getDistinctValues(fields, curFilters) {
     const result = {};
 
-    for (const field of fields) {
-        const values = await prisma.examQuestion.groupBy({
-            by: [field],
-            where: {
-                QuestionText: {
-                    isNot: null // only examQuestions WITH a linked QuestionText
-                },
-            },
-        });
+    // --- Base where: only examBoard + subject (the "universe") ---
+    const baseWhere = {
+        QuestionText: { isNot: null },
+    };
 
-        result[field] = values.map(v => v[field]);
+    if (curFilters.examBoard?.length > 0) {
+        baseWhere.examBoard = { in: curFilters.examBoard };
+    }
+    if (curFilters.subject?.length > 0) {
+        baseWhere.subject = { in: curFilters.subject };
+    }
+
+    // Fetch all records matching base filters
+    const baseRecords = await prisma.examQuestion.findMany({
+        where: baseWhere,
+        select: Object.fromEntries(fields.map(f => [f, true])),
+    });
+
+    // --- Full where: all filters ---
+    const fullWhere = { ...baseWhere };
+
+    for (const [filterField, filterValues] of Object.entries(curFilters)) {
+        if (filterValues.length > 0 && filterField !== "examBoard" && filterField !== "subject") {
+            if (filterField === "year") {
+                fullWhere.year = {
+                    in: filterValues.map(y => (y ? parseInt(y, 10) : null)),
+                };
+            } else {
+                fullWhere[filterField] = { in: filterValues };
+            }
+        }
+    }
+
+    // Fetch records matching *all* filters
+    const fullRecords = await prisma.examQuestion.findMany({
+        where: fullWhere,
+        select: Object.fromEntries(fields.map(f => [f, true])),
+    });
+
+    // --- Build results ---
+    for (const field of fields) {
+        if (field === "examBoard") {
+            // Always ALL distinct examBoards
+            const examBoards = await prisma.examQuestion.findMany({
+                where: { QuestionText: { isNot: null } },
+                select: { examBoard: true },
+                distinct: ["examBoard"],
+            });
+            result[field] = examBoards.map(r => r.examBoard).filter(v => v !== null);
+        }
+        else if (field === "subject") {
+            // Subject distincts only within full filters (so it narrows as you pick)
+            result[field] = [
+                ...new Set(fullRecords.map(r => r.subject).filter(v => v !== null)),
+            ];
+        }
+        else {
+            // Other fields: distincts always based on base filters (examBoard + subject only)
+            result[field] = [
+                ...new Set(baseRecords.map(r => r[field]).filter(v => v !== null)),
+            ];
+        }
     }
 
     return result;
 }
 
 app.get('/api/filters', async (req, res) => {
-    const distinct = await getDistinctValues(['examBoard', 'subject', 'paper', 'year', 'document', 'label']);
+    const rawFilters = req.query.c ? JSON.parse(req.query.c) : {};
+    const distinct = await getDistinctValues(['examBoard', 'subject', 'paper', 'year', 'document', 'label'], rawFilters);
     distinct.year = distinct.year.filter(y=>y)
     res.json({success: true, data:distinct});
 });
