@@ -3,21 +3,36 @@ const prisma = new PrismaClient();
 import fs from "fs/promises";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+
 import { spawn } from "child_process";
+import { promisify } from "util";
+import { exec as execCb } from "child_process";
 import path from "path";
 import { createWorker } from "tesseract.js";
 
+const exec = promisify(execCb);
+
+async function getMagickCommand() {
+    try {
+        await exec("magick -version");
+        return "magick";
+    } catch {
+        return "convert"; // fallback for Linux
+    }
+}
+
 async function convertPdfToPng(pdfPath, outputDir) {
     await fs.mkdir(outputDir, { recursive: true });
+    const magickCmd = await getMagickCommand();
 
     return new Promise((resolve, reject) => {
-        // Run `magick -density 300 input.pdf output/page.png`
-        const outputPattern = path.join(outputDir, "page.png");
-        const magick = spawn("magick", ["-density", "300", pdfPath, outputPattern]);
+        const outputPattern = path.join(outputDir, "page-%d.png");
+        const args = ["-density", "300", pdfPath, outputPattern];
+        const magick = spawn(magickCmd, args);
 
         magick.on("error", reject);
         magick.on("close", async (code) => {
-            if (code !== 0) return reject(new Error(`magick exited with code ${code}`));
+            if (code !== 0) return reject(new Error(`${magickCmd} exited with code ${code}`));
 
             const files = (await fs.readdir(outputDir))
                 .filter((f) => f.startsWith("page") && f.endsWith(".png"))
@@ -44,7 +59,6 @@ async function pdfToText(pdfPath) {
     await worker.terminate();
     return fullText.trim();
 }
-
 
 
 GlobalWorkerOptions.workerSrc = "pdfjs-dist/build/pdf.worker.mjs";
