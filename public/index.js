@@ -131,6 +131,12 @@ function fullSize(e) {
     const container = e.parentNode.parentNode
     container.classList.toggle("fullSize")
 }
+function openAndPrintPDF(path) {
+    const w = window.open(`${prefix}/print/${path}`);
+    w.addEventListener("load", () => {
+        w.print();
+    });
+}
 async function renderQuestion(data, query, q) {
     const { path, examBoard, paper, label, subject, year, question } = data;
     const pdf = await pdfjsLib.getDocument('preview/' + path).promise;
@@ -164,6 +170,24 @@ async function renderQuestion(data, query, q) {
   />
   <path
     d="M10.9819 6.97473H4.98193V18.9747H16.9819V12.9747H14.9819V16.9747H6.98193V8.97473H10.9819V6.97473Z"
+    fill="currentColor"
+  />
+</svg>
+</a>
+        <a href="#" onclick="openAndPrintPDF('${path}')">
+
+        <svg
+        class="externalButton"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <path
+    fill-rule="evenodd"
+    clip-rule="evenodd"
+    d="M8 4H16V6H8V4ZM18 6H22V18H18V22H6V18H2V6H6V2H18V6ZM20 16H18V14H6V16H4V8H20V16ZM8 16H16V20H8V16ZM8 10H6V12H8V10Z"
     fill="currentColor"
   />
 </svg>

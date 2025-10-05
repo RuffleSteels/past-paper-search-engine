@@ -1,11 +1,110 @@
 import express from 'express';
 import { PrismaClient } from "./generated/prisma/index.js";
+import path from "path";
+import {PDFDocument} from "pdf-lib";
+import fs from "fs";
+
 const prisma = new PrismaClient();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.set("query parser", "simple");
 app.use(express.static('public'));
+
+app.get("/print/:filename", async (req, res) => {
+    try {
+        const { filename } = req.params;
+
+        const qpPath = path.join( "merged", `${filename}`);
+        const msPath = path.join( "merged", `${filename.replace('-qp-', '-ms-')}`);
+
+        if (!fs.existsSync(qpPath) || !fs.existsSync(msPath)) {
+            return res.status(404).send("Missing PDF files");
+        }
+
+        // Load both PDFs
+        const qpPdf = await PDFDocument.load(fs.readFileSync(qpPath));
+        const msPdf = await PDFDocument.load(fs.readFileSync(msPath));
+
+        const merged = await PDFDocument.create();
+
+        const A4_WIDTH = 595.28; // 210mm
+        const A4_HEIGHT = 841.89; // 297mm
+        const MARGIN = 20;
+
+        // --- Embed and measure all pages ---
+        const allEmbeddedPages = [];
+        const embedAllPages = async (srcPdf) => {
+            for (let i = 0; i < srcPdf.getPageCount(); i++) {
+                const [embeddedPage] = await merged.embedPages([srcPdf.getPage(i)]);
+                allEmbeddedPages.push(embeddedPage);
+            }
+        };
+
+        await embedAllPages(qpPdf);
+        await embedAllPages(msPdf);
+
+        // --- Compute total height needed ---
+        let totalHeight = MARGIN;
+        const scaledData = [];
+
+        for (const page of allEmbeddedPages) {
+            const { width, height } = page;
+            const scale = (A4_WIDTH - MARGIN * 2) / width;
+            const scaledHeight = height * scale;
+            scaledData.push({ page, scale, scaledHeight });
+            totalHeight += scaledHeight + MARGIN;
+        }
+
+        // --- Create one large page with custom height ---
+        const finalPage = merged.addPage([A4_WIDTH, totalHeight]);
+
+        // --- Draw all pages stacked vertically ---
+        let y = totalHeight - MARGIN;
+        for (const { page, scale, scaledHeight } of scaledData) {
+            y -= scaledHeight;
+            finalPage.drawPage(page, {
+                x: MARGIN,
+                y,
+                xScale: scale,
+                yScale: scale,
+            });
+            y -= MARGIN;
+        }
+
+        // --- Save tall PDF ---
+        const tallBytes = await merged.save();
+
+        // --- Load tall PDF and slice into A4 pages ---
+        const tallPdf = await PDFDocument.load(tallBytes);
+        const output = await PDFDocument.create();
+
+        const [tallPage] = await output.embedPages([tallPdf.getPage(0)]);
+        const tallHeight = tallPage.height;
+        const totalPages = Math.ceil(tallHeight / A4_HEIGHT);
+
+        for (let i = 0; i < totalPages; i++) {
+            const page = output.addPage([A4_WIDTH, A4_HEIGHT]);
+            const yOffset = tallHeight - (i + 1) * A4_HEIGHT;
+
+            // Draw the slice starting from top going downward
+            page.drawPage(tallPage, {
+                x: 0,
+                y: -yOffset,
+            });
+        }
+
+        // --- Output paginated PDF ---
+        const finalBytes = await output.save();
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename=${filename}.pdf`);
+        res.send(Buffer.from(finalBytes));
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error combining PDFs");
+    }
+});
+
 app.get('/api/search', async (req, res) => {
     const page = Number(req.query.p) || 1;
 
