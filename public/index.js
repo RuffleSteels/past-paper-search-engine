@@ -1,107 +1,5 @@
-// function drawHighlight(ctx, rect, color = "rgba(0,0,0,0.55)") {
-//     const pad = Math.max(1, Math.round(rect.height * 0.08));
-//     ctx.fillStyle = color;
-//     ctx.fillRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
-//
-//     ctx.strokeStyle = "rgba(200,140,0,0.9)";
-//     ctx.lineWidth = 1;
-//     ctx.strokeRect(rect.left - pad, rect.top - pad, rect.width + pad * 2, rect.height + pad * 2);
-// }
-// function measureTextWidth(ctx, text, fontSize, fontFamily = "sans-serif") {
-//     ctx.save();
-//     ctx.font = `${fontSize}px ${fontFamily}`;
-//     const width = ctx.measureText(text).width;
-//     ctx.restore();
-//     return width;
-// }
-// function getTextItemRect(item, viewport, ctx) {
-//     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-//     const fontHeight = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 12;
-//     const baselineX = tx[4];
-//     const baselineY = tx[5];
-//
-//     ctx.save();
-//     ctx.font = `${fontHeight}px sans-serif`;
-//     ctx.textBaseline = "alphabetic";
-//     const width = ctx.measureText(item.str).width;
-//     ctx.restore();
-//
-//     const left = baselineX;
-//     const top = baselineY - fontHeight;
-//
-//     return { left, top, width, height: fontHeight };
-// }
-// // async function renderQuestion(filename, query) {
-// //     console.log(filename)
-// //     const pageWrapper = document.createElement("div");
-// //     pageWrapper.className = "pageWrapper";
-// //     const pdfCanvas = document.createElement("canvas");
-// //     pdfCanvas.id = "pdf-canvas-" + 0;
-// //     pdfCanvas.className = "pdf-canvas";
-// //     const overlay = document.createElement("canvas");
-// //     overlay.id = "overlay-" + 0;
-// //     overlay.className = "overlay";
-// //     const ctxOverlay = overlay.getContext("2d");
-// //
-// //     pageWrapper.appendChild(overlay);
-// //     pageWrapper.appendChild(pdfCanvas);
-// //     document.getElementById("results").appendChild(pageWrapper);
-// //     const pdf = await pdfjsLib.getDocument(`/question/${filename}`).promise;
-// //     const page = await pdf.getPage(1);
-// //     const viewport = page.getViewport({ scale: 1.5 });
-// //
-// //     [pdfCanvas, overlay].forEach(c => {
-// //         c.width = viewport.width;
-// //         c.height = viewport.height;
-// //     });
-// //
-// //     const ctx = pdfCanvas.getContext("2d");
-// //     await page.render({ canvasContext: ctx, viewport }).promise;
-// //
-// //     ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
-// //
-// //     textContent.items.forEach(item => {
-// //         const str = item.str;
-// //         const lower = str.toLowerCase();
-// //         let startIndex = 0;
-// //         let matchIndex;
-// //         while ((matchIndex = lower.indexOf(search, startIndex)) >= 0) {
-// //             // We have a match in this item.str from matchIndex to matchIndex + search.length
-// //             // We need to calculate the bounding box for that substring.
-// //             // Unfortunately item may not split on words, so it might be approximate.
-// //             const transform = item.transform; // this along with font metrics gives us positioning
-// //             const fontSize = item.height;     // or something like that
-// //             // (Exact calculation of substring width is tricky – may need measureText or rely on PDF.js textDivs)
-// //
-// //             // One simple approx: use the textDiv created for this item in text layer
-// //             // get the matching textDiv, then overlay highlight
-// //             // For demo:
-// //             const div = textLayerDiv.querySelector(`div[data-text-index="${item.index}"]`);
-// //             if (div) {
-// //                 const rect = div.getBoundingClientRect();
-// //                 // For simplicity highlight the whole textDiv
-// //                 const highlightDiv = document.createElement('div');
-// //                 highlightDiv.className = 'highlight';
-// //                 // Use pageDiv as positioning context
-// //                 const pageDivRect = pageDiv.getBoundingClientRect();
-// //
-// //                 highlightDiv.style.left = (rect.left - pageDivRect.left) + 'px';
-// //                 highlightDiv.style.top = (rect.top - pageDivRect.top) + 'px';
-// //                 highlightDiv.style.width = rect.width + 'px';
-// //                 highlightDiv.style.height = rect.height + 'px';
-// //                 pageDiv.appendChild(highlightDiv);
-// //             }
-// //
-// //             startIndex = matchIndex + search.length;
-// //         }
-// //     });
-// // }
-
-
 let prefix = '' // osdfh£($&21lq0(@)
-let PAGE_HEIGHT;
 let pdfDocument;
-const DEFAULT_SCALE = 1.33;
 
 function createEmptyPage(num) {
     const page = document.createElement("div");
@@ -145,7 +43,7 @@ function loadPage(pageNum, viewer, query) {
 
         // create an offscreen canvas (not appended to DOM)
         const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
+        let ctx = canvas.getContext("2d");
 
         canvas.width = viewport.width * outputScale;
         canvas.height = viewport.height * outputScale;
@@ -159,13 +57,17 @@ function loadPage(pageNum, viewer, query) {
         return renderTask.promise.then(() => {
             // Convert canvas to image
             const img = document.createElement("img");
-            img.src = canvas.toDataURL("image/png"); // compress with "image/jpeg" for lighter size
+            img.src = canvas.toDataURL("image/jpeg", 0.6); // compress with "image/jpeg" for lighter size
             img.style.width = "100%";
             img.style.height = "auto";
 
             // clear wrapper, then append image
             wrapper.innerHTML = "";
             wrapper.appendChild(img);
+
+            canvas.width = 0;
+            canvas.height = 0;
+            ctx = null;
 
             // render text layer on top (for selection/search)
             return pdfPage.getTextContent().then(textContent => {
@@ -180,48 +82,6 @@ function loadPage(pageNum, viewer, query) {
     });
 }
 
-// function loadPage(pageNum,viewer, query) {
-//     return pdfDocument.getPage(pageNum).then((pdfPage) => {
-//         const page = viewer.querySelector(`#pageContainer${pageNum}`);
-//         const canvas = page.querySelector("canvas");
-//         const wrapper = page.querySelector(".canvasWrapper");
-//         const container = page.querySelector(".textLayer");
-//         const canvasContext = canvas.getContext("2d");
-//         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
-//         const scale = viewer.clientWidth / unscaledViewport.width;
-//         const viewport = pdfPage.getViewport({ scale });
-//         const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-//         canvas.width = viewport.width * outputScale;
-//         canvas.height = viewport.height * outputScale;
-//         canvas.style.width = "100%";
-//         canvas.style.height = "auto";
-//
-//         page.style.width = "100%";
-//         page.style.height = "auto";
-//         wrapper.style.width = "100%";
-//         wrapper.style.height = "auto";
-//         container.style.width = "100%";
-//         container.style.height = "auto";
-//
-//         // Render PDF page into canvas
-//         const renderTask = pdfPage.render({
-//             canvasContext,
-//             viewport,
-//             transform: [outputScale, 0, 0, outputScale, 0, 0],
-//         });
-//
-//         const textPromise = pdfPage.getTextContent().then(textContent => {
-//             return pdfjsLib.renderTextLayer({
-//                 textContent,
-//                 container,
-//                 viewport,
-//                 textDivs: [],
-//             }).promise; // 👈 return this promise
-//         });
-//
-//         return Promise.all([textPromise]).then(() => pdfPage);
-//     });
-// }
 function highlightWordInTextLayer(word, container, viewer, path) {
     if (!word) return -1;
 
@@ -389,9 +249,8 @@ async function renderQuestion(data, query, q) {
     // only after everything is ready
     return true; // signal finished
 }
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}let controller;       // for aborting fetch
+
+let controller;       // for aborting fetch
 let debounceTimer;    // for debouncing
 let currentSearchId = 0;
 let stop = false;
@@ -406,7 +265,6 @@ let maxPages = 1;
 
 async function search(input = true, page = 1) {
     const query = document.getElementById('search').value;
-
     if (query === '') {
         stop = true;
         if (controller) controller.abort();
@@ -454,20 +312,20 @@ async function search(input = true, page = 1) {
             document.querySelector('#results').style.opacity = 0
             document.querySelector('#noResults').style.display = 'none';
             const promises = [];
-
+            document.querySelector('.resultsNumWrapper').style.display = 'block';
+            document.querySelector('.gradientContainer.second').style.display = 'block';
+            document.querySelector('#results').style.opacity = 1
+            document.querySelector('.pageNav').style.display = 'flex';
             for (let i = 0; i < data.data.length && i < 10; i++) {
                 if (searchId !== currentSearchId || stop) {
                     document.getElementById('results').innerHTML = '';
                     return;
                 }
-                promises.push(renderQuestion(data.data[i], query, i));
+                await renderQuestion(data.data[i], query, i);
             }
 
-            await Promise.all(promises);
-            document.querySelector('.resultsNumWrapper').style.display = 'block';
-            document.querySelector('.gradientContainer.second').style.display = 'block';
-            document.querySelector('#results').style.opacity = 1
-            document.querySelector('.pageNav').style.display = 'flex';
+            // await Promise.all(promises);
+
         } else {
             document.querySelector('.gradientContainer.second').style.display = 'none';
             document.querySelector('#noResults').style.display = 'block';
@@ -498,12 +356,9 @@ function removeFilter(e,field, specific=null) {
         delete window.currentFilters[field][window.currentFilters[field].map((i)=>i.toString()).indexOf(specific)]
         window.currentFilters[field] = window.currentFilters[field].filter(x => x !== undefined)
     } else {
-        window.currentFilters[field].push(specific)
+        window.currentFilters[field].push(parseInt(specific) ? parseInt(specific) : specific)
         window.currentFilters[field] = window.currentFilters[field].filter(x => x !== undefined)
     }
-    console.log(prev)
-    console.log(window.currentFilters[field])
-    console.log((!(window.distinct[field].length === 1)))
     updateFilters((!compareArrays(prev, window.currentFilters[field])) && (!(window.distinct[field].length === 1)))
 }
 let openDrop = null
@@ -539,10 +394,11 @@ function cleanText(text) {
 async function updateFilters(doSearch = true, first = false) {
     if (window?.distinct) {
         if (!first) await fetchFilters(false)
-        console.log('update', window.distinct)
         const container = document.querySelector('.searchFilterContainer')
         container.innerHTML = ''
+        let pastInnerTexts = []
         for (let field in window.distinct) {
+
             const newDiv = document.createElement('div');
             newDiv.classList.add('filterItem');
             let innerText = 'all'
@@ -558,16 +414,47 @@ async function updateFilters(doSearch = true, first = false) {
             else if (!compareArrays(window.currentFilters[field].map((i)=>i.toString()).sort(),window.distinct[field].map((i)=>i.toString()).sort())) {
                 innerText = window.currentFilters[field].map(i=>cleanText(i)).sort().join(', ')
             }
+            pastInnerTexts.push(innerText)
             newDiv.innerHTML = `
                 <h6 class="filterText">
-                    <div class="${field}Dropdown dropdownWrapper ${openDrop && openDrop===field ? 'show' : ''}">
-                        ${window.distinct[field].sort().map((item,i) => {
-                        return `<div onclick="removeFilter(event,'${field}', '${item}')" class="dropdownItem ${window.currentFilters[field].map((i)=>i.toString()).includes(item.toString()) ? 'selected' : ''}">
+                    <div class="${field}Dropdown searchFilterContainer dropdownWrapper ${openDrop && openDrop===field ? 'show' : ''}">
+                    ${pastInnerTexts.map((item, i)=>{
+                        return `
+                            <div class="filterItem">
+                            ${
+                            i === pastInnerTexts.length - 1 ? 
+                                `<div class="dropdownBox">
+                                            ${window.distinct[field].sort().map((item,i) => {
+                                    return `<div onclick="removeFilter(event,'${field}', '${item}')" class="dropdownItem ${window.currentFilters[field].map((i)=>i.toString()).includes(item.toString()) ? 'selected' : ''}">
                                     <h6 class="dropdownText">
                                         ${cleanText(item)}
                                     </h6>
                                 </div>`
-                        }).join('')}
+                                }).join('')}
+</div>` : ``
+                            }
+                    ${Object.keys(window.distinct)[i]}
+                    <span class="innerText">
+                        ${item}
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M11.6603 5L3 20H20.3205L11.6603 5ZM11.6603 11L8.19615 17H15.1244L11.6603 11Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                    </span>
+                </div>
+                        `
+                
+            }).join('')}
+                    
+
                     </div>
                     ${field}
                     <span onclick="openDropdown(event,'${field}')" class="innerText">
@@ -588,9 +475,9 @@ async function updateFilters(doSearch = true, first = false) {
                 </h6>
             `
             container.appendChild(newDiv);
+
         }
         if (doSearch) {
-            // if (!first) fetchFilters(false)
             search()
         }
     }

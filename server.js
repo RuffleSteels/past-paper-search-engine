@@ -129,9 +129,12 @@ async function getDistinctValues(fields, curFilters) {
         }
         else if (field === "subject") {
             // Subject distincts only within full filters (so it narrows as you pick)
-            result[field] = [
-                ...new Set(fullRecords.map(r => r.subject).filter(v => v !== null)),
-            ];
+            const subjects = await prisma.examQuestion.findMany({
+                where: { QuestionText: { isNot: null } },
+                select: { subject: true },
+                distinct: ["subject"],
+            });
+            result[field] = subjects.map(r => r.subject).filter(v => v !== null);
         }
         else {
             // Other fields: distincts always based on base filters (examBoard + subject only)

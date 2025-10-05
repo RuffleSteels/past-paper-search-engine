@@ -209,8 +209,10 @@ canvas { display: block; }
 .searchFilterContainer {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 12px;
-}h6 {
+    position: relative;
+}h6,h5, h4, h3, h2, h1 {
     margin: 0;
     padding: 0;
  }
@@ -218,7 +220,7 @@ canvas { display: block; }
     margin: 0;
     padding: 0;
     font-size: 16px;
-    position: relative;
+    /*position: relative;*/
 }
 .dropdownText {
     font-size: 16px;
@@ -234,15 +236,52 @@ canvas { display: block; }
 .dropdownWrapper.show {
     display: flex;
 }
+.dropdownWrapper .filterItem:last-child {
+    flex: 1 1 ;
+}
+.dropdownBox {
+    z-index: 1000;
+    position: relative;
+    display: flex;
+    flex: 1 1;
+    flex-wrap: wrap;
+    width: auto;
+    flex-direction: row;
+    width: fit-content;
+    background: rgb(166 163 174);
+    gap: 2px;
+    column-gap: 12px;
+    padding: 6px 8px;
+    color: white;
+}
+.dropdownWrapper .filterItem .innerText {
+    opacity: 0;
+}
+.dropdownWrapper .filterItem {
+    max-width: 100%;
+    /*opacity: 0;*/
+    color: transparent;
+    /*padding-top: 0;*/
+    background: transparent;
+    text-wrap: nowrap;
+}
 .dropdownWrapper {
+    max-width: calc(100% - 6px);
+    /*flex-wrap: wrap;*/
     display: none;
     position: absolute;
-    top: 100%;
-    padding: 3px 4px;
-    gap: 6px;
-    left: 0;
+    top: 30px;
+
+    /*padding: 3px 4px;*/
+    /*gap: 6px;*/
+    left: 6px;
     /*display: flex;*/
-    background: rgba(255, 255, 255, 0.38);
+    /*background: rgba(255, 255, 255, 0.38);*/
+    /*display: flex;*/
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+    /*position: relative;*/
 }
 .filterItem {
     background: rgba(255, 255, 255, 0.2);
@@ -265,22 +304,39 @@ canvas { display: block; }
     margin-left: 3px;
 }
 @media (max-width: 768px) {
-    #results {
-        display: flex;
-        /*flex-direction: row;*/
-        overflow-x: scroll;
-        scroll-snap-type: x mandatory;
-        /*width: 100%;*/
-        column-gap: 0;
+    .searchInput {
+        font-size: 20px;
     }
+    .filterText, .dropdownText {
+        /*padding: 0;*/
+        font-size: 12px;
+    }
+    .dropdownWrapper {
+        top: 20px;
+        max-width: calc(100% - 3px);
+    }
+    .filterItem, .dropdownBox {
+        padding: 3px 6px;
+    }
+    .searchFilterContainer {
+        gap: 6px;
+    }
+    /*#results {*/
+    /*    display: flex;*/
+    /*    !*flex-direction: row;*!*/
+    /*    overflow-x: scroll;*/
+    /*    scroll-snap-type: x mandatory;*/
+    /*    !*width: 100%;*!*/
+    /*    column-gap: 0;*/
+    /*}*/
     .mainBox {
-        padding: 0;
+        padding: 12px 0;
     }
-    .questionWrapper {
-        padding: 0 16px;
-        box-sizing: border-box;
-        min-width: 100vw;
-        scroll-snap-align: start;
-        display: inline-block;
-    }
+    /*.questionWrapper {*/
+    /*    padding: 0 16px;*/
+    /*    box-sizing: border-box;*/
+    /*    min-width: 100vw;*/
+    /*    scroll-snap-align: start;*/
+    /*    display: inline-block;*/
+    /*}*/
 }
