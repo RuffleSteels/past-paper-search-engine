@@ -274,19 +274,12 @@ async function main() {
     //     },
     // }
     const where =         {
-        document: 'ms',
-        examBoard: 'ocr-mei-further',
-        subject: 'maths',
-            paper: {
-                in: [
-                    'mechanics-minor',
-                    'mechanics-major',
-                    'statistics-major',
-                    'pure-core',
-                    'statistics-minor'
-                ]
-            },
+        document: 'qp',
+        examBoard: 'ocr-b',
+        subject: 'chemistry',
+            // paper: 'paper-3',
         // year: 2022,
+        // label: 'specimen',
     }
     const papers = await prisma.examPaper.findMany({
         where
@@ -298,7 +291,7 @@ async function main() {
     console.log(papers)
     for (const paper of papers) {
         try {
-            await processMs(paper);
+            await processPaper(paper);
         } catch (err) {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }

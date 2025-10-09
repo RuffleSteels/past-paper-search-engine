@@ -72,8 +72,8 @@ async function main() {
 
     const where =         {
         document: 'qp',
-        examBoard: 'ocr-a',
-        subject: 'biology',
+        examBoard: 'ocr-b',
+        subject: 'chemistry',
         // paper: 'paper-1',
         // year: 2017\
         // paper: {

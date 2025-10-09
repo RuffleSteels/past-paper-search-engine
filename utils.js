@@ -294,6 +294,7 @@ export async function extractPageSplits(pdfPath, srcDoc, board) {
             }
             let residual = ''
             for (const item of textContent.items) {
+                if (endTrue) continue
                 const text = (item.str || "").toLowerCase();
 
 

@@ -15,9 +15,8 @@ app.get("/print/:filename", async (req, res) => {
     try {
         const { filename } = req.params;
 
-        const qpPath = path.join( "merged", `${filename}`);
+        const qpPath = path.join( "out", `${filename}`);
         const msPath = path.join( "merged", `${filename.replace('-qp-', '-ms-')}`);
-
         if (!fs.existsSync(qpPath) || !fs.existsSync(msPath)) {
             return res.status(404).send("Missing PDF files");
         }
@@ -31,77 +30,74 @@ app.get("/print/:filename", async (req, res) => {
         const A4_WIDTH = 595.28; // 210mm
         const A4_HEIGHT = 841.89; // 297mm
         const MARGIN = 20;
+        const usableWidth = A4_WIDTH - 2 * MARGIN;
+        const usableHeight = A4_HEIGHT - 2 * MARGIN;
 
-        // --- Embed and measure all pages ---
+        // --- Embed all pages from both source PDFs (embed in batches, not one-by-one) ---
         const allEmbeddedPages = [];
-        const embedAllPages = async (srcPdf) => {
-            for (let i = 0; i < srcPdf.getPageCount(); i++) {
-                const [embeddedPage] = await merged.embedPages([srcPdf.getPage(i)]);
-                allEmbeddedPages.push(embeddedPage);
-            }
+
+        const embedPagesFrom = async (srcPdf) => {
+            const srcPages = srcPdf.getPages(); // array of PDFPage
+            if (srcPages.length === 0) return;
+            const embedded = await merged.embedPages(srcPages); // embed them in one call
+            embedded.forEach((ep) => allEmbeddedPages.push(ep));
         };
 
-        await embedAllPages(qpPdf);
-        await embedAllPages(msPdf);
+        await embedPagesFrom(qpPdf);
+        await embedPagesFrom(msPdf);
 
-        // --- Compute total height needed ---
-        let totalHeight = MARGIN;
-        const scaledData = [];
+        // --- Layout: create A4 pages and place whole source pages (no splitting).
+        // If a scaled page would be taller than usableHeight, scale down so it fits a single A4.
+        let currentPage = null;
+        let currentY = 0; // top cursor
 
-        for (const page of allEmbeddedPages) {
-            const { width, height } = page;
-            const scale = (A4_WIDTH - MARGIN * 2) / width;
-            const scaledHeight = height * scale;
-            scaledData.push({ page, scale, scaledHeight });
-            totalHeight += scaledHeight + MARGIN;
-        }
+        for (const embeddedPage of allEmbeddedPages) {
+            // embeddedPage has width & height in points
+            const { width, height } = embeddedPage;
 
-        // --- Create one large page with custom height ---
-        const finalPage = merged.addPage([A4_WIDTH, totalHeight]);
+            // scale to fit A4 width first
+            let scale = usableWidth / width;
+            let scaledHeight = height * scale;
 
-        // --- Draw all pages stacked vertically ---
-        let y = totalHeight - MARGIN;
-        for (const { page, scale, scaledHeight } of scaledData) {
-            y -= scaledHeight;
-            finalPage.drawPage(page, {
+            // if after width-scaling the page would exceed usable height, scale it down further so it fits
+            if (scaledHeight > usableHeight) {
+                scale = usableHeight / height; // fits height within usable area
+                scaledHeight = height * scale;
+            }
+
+            // Ensure we have a current page to draw onto
+            if (!currentPage) {
+                currentPage = merged.addPage([A4_WIDTH, A4_HEIGHT]);
+                currentY = A4_HEIGHT - MARGIN;
+            }
+
+            // If the entire source page won't fit in the remaining vertical space, start a new A4
+            const remainingSpace = currentY - MARGIN; // space from currentY down to bottom margin
+            if (scaledHeight > remainingSpace) {
+                currentPage = merged.addPage([A4_WIDTH, A4_HEIGHT]);
+                currentY = A4_HEIGHT - MARGIN;
+            }
+
+            // Draw the entire source page (never split)
+            currentPage.drawPage(embeddedPage, {
                 x: MARGIN,
-                y,
+                y: currentY - scaledHeight,
                 xScale: scale,
                 yScale: scale,
             });
-            y -= MARGIN;
+
+            // Move cursor down leaving a margin gap
+            currentY -= scaledHeight + MARGIN;
         }
 
-        // --- Save tall PDF ---
-        const tallBytes = await merged.save();
-
-        // --- Load tall PDF and slice into A4 pages ---
-        const tallPdf = await PDFDocument.load(tallBytes);
-        const output = await PDFDocument.create();
-
-        const [tallPage] = await output.embedPages([tallPdf.getPage(0)]);
-        const tallHeight = tallPage.height;
-        const totalPages = Math.ceil(tallHeight / A4_HEIGHT);
-
-        for (let i = 0; i < totalPages; i++) {
-            const page = output.addPage([A4_WIDTH, A4_HEIGHT]);
-            const yOffset = tallHeight - (i + 1) * A4_HEIGHT;
-
-            // Draw the slice starting from top going downward
-            page.drawPage(tallPage, {
-                x: 0,
-                y: -yOffset,
-            });
-        }
-
-        // --- Output paginated PDF ---
-        const finalBytes = await output.save();
+        // --- Save & return ---
+        const finalBytes = await merged.save();
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `inline; filename=${filename}.pdf`);
         res.send(Buffer.from(finalBytes));
     } catch (err) {
         console.error(err);
-        res.status(500).send("Error combining PDFs");
+        res.status(500).send("Error generating PDF: " + (err && err.message));
     }
 });
 

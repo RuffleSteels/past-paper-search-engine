@@ -8,48 +8,49 @@ const prisma = new PrismaClient();
 function parsePaperUrl(url) {
     const decoded = decodeURIComponent(url);
 
-    // Capture subject, level, and the rest of the path
-    let re = /download\/(?<subject>[^/]+)\/(?<level>[^/]+)\/Past-Papers\/(?<board>[^/]+)\/(?<paper>[^/]+)\/(?<docType>[^/]+)\/(?<filename>[^/]+)$/i;
-    let m = decoded.match(re);
-    if (!m) {
-        re = /download\/(?<subject>[^/]+)\/(?<level>[^/]+)\/Papers\/(?<board>[^/]+)\/(?<paper>[^/]+)\/(?<docType>[^/]+)\/(?<filename>[^/]+)$/i;
-        m = decoded.match(re);
-        if (!m) return null;
-    }
+    // Try to capture both cases: with or without docType folder
+    const re = /download\/(?<subject>[^/]+)\/(?<level>[^/]+)\/Past-Papers\/(?<board>[^/]+)\/(?<paper>[^/]+)(?:\/(?<docType>[^/]+))?\/(?<filename>[^/]+)$/i;
+    const m = decoded.match(re);
+    if (!m) return null;
 
-    const { subject, level, board, paper, docType, filename } = m.groups;
+    let { subject, level, board, paper, docType, filename } = m.groups;
 
-    // Remove extension
+    // Some URLs have docType inside the filename (e.g. "June 2017 QP - Paper 1 OCR (B)...")
     const base = filename.replace(/\.pdf$/i, "").trim();
-
-    // Split into words
     const parts = base.split(/\s+/);
 
     let year = null;
 
-    // Extract 4-digit year if present
+    // Extract 4-digit year
     for (let i = 0; i < parts.length; i++) {
         if (/^\d{4}$/.test(parts[i])) {
             year = parts[i];
-            parts.splice(i, 1); // remove the year
+            parts.splice(i, 1);
             break;
         }
     }
 
-    // Last part is always the docKey (e.g. "QP", "MS")
-    const docKey = parts.pop();
-
-    // Everything else makes up the label
-    const label = parts.join(" ");
+    // Try to detect docKey (QP, MS, etc.) from either folder or filename
+    if (!docType) {
+        const found = parts.find(p => /^(QP|MS|ER|IRS)$/i.test(p));
+        if (found) {
+            docType = found.toUpperCase();
+            parts.splice(parts.indexOf(found), 1);
+        }
+    }
+    let label = parts.join(" ");
+    if (label.includes("-")) {
+        label = label.split("-")[0].trim();
+    }
 
     return {
-        subject,  // e.g. "Maths"
-        level,    // e.g. "GCSE"
-        board,    // e.g. "Edexcel"
-        paper,    // e.g. "Paper-3H"
-        docType,  // e.g. "QP"
-        label,    // e.g. "Specimen 1", "Nov", "Sample"
-        year,     // e.g. "2023" or null
+        subject,  // e.g. "Chemistry"
+        level,    // e.g. "A-level"
+        board,    // e.g. "OCR-B"
+        paper,    // e.g. "Paper-1"
+        docType: docType || null, // e.g. "QP"
+        label,    // e.g. "June Paper 1 OCR (B) Chemistry A-level"
+        year,     // e.g. "2017"
     };
 }
 
@@ -73,9 +74,9 @@ async function scrape() {
     const document = dom.window.document;
 
     const results = [
-        'https://www.physicsandmathstutor.com/past-papers/a-level-biology/ocr-a-paper-1/',
-        'https://www.physicsandmathstutor.com/past-papers/a-level-biology/ocr-a-paper-2/',
-        'https://www.physicsandmathstutor.com/past-papers/a-level-biology/ocr-a-paper-3/'
+        'https://www.physicsandmathstutor.com/past-papers/a-level-chemistry/ocr-b-paper-1/',
+        'https://www.physicsandmathstutor.com/past-papers/a-level-chemistry/ocr-b-paper-2/',
+        'https://www.physicsandmathstutor.com/past-papers/a-level-chemistry/ocr-b-paper-3/'
     ];
 
     if (results.length === 0) {
