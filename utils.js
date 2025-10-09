@@ -299,7 +299,7 @@ export async function extractPageSplits(pdfPath, srcDoc, board) {
 
 
 
-                if (isValidString(text.trim()) && getTextItemRect(item, viewport, ctx).left < 100) {
+                if (isValidString(text.trim()) && getTextItemRect(item, viewport, ctx).left < 60) {
                     console.log(item)
                     const clean = text.replace(/\D/g, "")
                     if (parseInt(clean) === questionCounter) {

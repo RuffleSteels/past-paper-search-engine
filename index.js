@@ -277,8 +277,8 @@ async function main() {
         document: 'qp',
         examBoard: 'ocr-b',
         subject: 'chemistry',
-            // paper: 'paper-3',
-        // year: 2022,
+            // paper: 'paper-1',
+        // year: 2023,
         // label: 'specimen',
     }
     const papers = await prisma.examPaper.findMany({

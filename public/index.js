@@ -23,15 +23,16 @@ function createEmptyPage(num) {
 
     return page;
 }
+
 function loadPage(pageNum, viewer, query) {
     return pdfDocument.getPage(pageNum).then((pdfPage) => {
         const page = viewer.querySelector(`#pageContainer${pageNum}`);
         const wrapper = page.querySelector(".canvasWrapper");
         const container = page.querySelector(".textLayer");
 
-        const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+        const unscaledViewport = pdfPage.getViewport({scale: 1});
         const scale = viewer.clientWidth / unscaledViewport.width;
-        const viewport = pdfPage.getViewport({ scale });
+        const viewport = pdfPage.getViewport({scale});
         const outputScale = Math.min(window.devicePixelRatio || 1, 2);
 
         page.style.width = "100%";
@@ -127,18 +128,40 @@ function highlightWordInTextLayer(word, container, viewer, path) {
 
     return -1;
 }
+
 function fullSize(e) {
     const container = e.parentNode.parentNode
     container.classList.toggle("fullSize")
 }
+
 function openAndPrintPDF(path) {
     const w = window.open(`${prefix}/print/${path}`);
     w.addEventListener("load", () => {
         w.print();
     });
 }
+
+// <a href="#" onClick="openAndPrintPDF('${path}')">
+//
+//     <svg
+//         className="externalButton"
+//         width="24"
+//         height="24"
+//         viewBox="0 0 24 24"
+//         fill="none"
+//         xmlns="http://www.w3.org/2000/svg"
+//     >
+//         <path
+//             fill-rule="evenodd"
+//             clip-rule="evenodd"
+//             d="M8 4H16V6H8V4ZM18 6H22V18H18V22H6V18H2V6H6V2H18V6ZM20 16H18V14H6V16H4V8H20V16ZM8 16H16V20H8V16ZM8 10H6V12H8V10Z"
+//             fill="currentColor"
+//         />
+//     </svg>
+// </a>
+
 async function renderQuestion(data, query, q) {
-    const { path, examBoard, paper, label, subject, year, question } = data;
+    const {path, examBoard, paper, label, subject, year, question} = data;
     const pdf = await pdfjsLib.getDocument('preview/' + path).promise;
     pdfDocument = pdf;
 
@@ -149,7 +172,7 @@ async function renderQuestion(data, query, q) {
     <div class="questionTitle">
         <h4 class="subheader">
         ${label} ${year ? year : ''} ${paper} Q${question}
-        </h4>        <a href="${'question/' + path.split('.')[0].replace('-qp-','-ms-') + '.pdf'}" target="_blank" rel="noopener noreferrer">
+        </h4>        <a href="${'question/' + path.split('.')[0].replace('-qp-', '-ms-') + '.pdf'}" target="_blank" rel="noopener noreferrer">
             <h3>
                 MS
             </h3>
@@ -174,24 +197,7 @@ async function renderQuestion(data, query, q) {
   />
 </svg>
 </a>
-        <a href="#" onclick="openAndPrintPDF('${path}')">
-
-        <svg
-        class="externalButton"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  xmlns="http://www.w3.org/2000/svg"
->
-  <path
-    fill-rule="evenodd"
-    clip-rule="evenodd"
-    d="M8 4H16V6H8V4ZM18 6H22V18H18V22H6V18H2V6H6V2H18V6ZM20 16H18V14H6V16H4V8H20V16ZM8 16H16V20H8V16ZM8 10H6V12H8V10Z"
-    fill="currentColor"
-  />
-</svg>
-</a>
+        
         
         <svg
         onclick="fullSize(this)"
@@ -246,7 +252,7 @@ async function renderQuestion(data, query, q) {
     }
 
     // Render all pages in parallel
-    const pagePromises = Array.from({ length: pdf.numPages }, async (_, idx) => {
+    const pagePromises = Array.from({length: pdf.numPages}, async (_, idx) => {
         const pageNum = idx + 1;
         const pageContainer = viewer.querySelector(`#pageContainer${pageNum}`);
         const pdfPage = await loadPage(pageNum, viewer);
@@ -278,6 +284,7 @@ let controller;       // for aborting fetch
 let debounceTimer;    // for debouncing
 let currentSearchId = 0;
 let stop = false;
+
 function debouncedSearch() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(search, 300);
@@ -315,7 +322,7 @@ async function search(input = true, page = 1) {
     const searchId = ++currentSearchId;
 
     try {
-        const res = await fetch(`${prefix}/api/search?q=${encodeURIComponent(query)}&p=${page}&f=${encodeURIComponent(JSON.stringify(window.currentFilters))}`, { signal });
+        const res = await fetch(`${prefix}/api/search?q=${encodeURIComponent(query)}&p=${page}&f=${encodeURIComponent(JSON.stringify(window.currentFilters))}`, {signal});
         const data = await res.json();
 
         if (searchId !== currentSearchId) return;
@@ -326,8 +333,8 @@ async function search(input = true, page = 1) {
             if (input) {
                 pageNum = 1;
                 maxPages = data?.totalPages || 1;
-                document.querySelector('#resultsNum').innerHTML =data?.totalCount || 1
-                    checkNav();
+                document.querySelector('#resultsNum').innerHTML = data?.totalCount || 1
+                checkNav();
                 document.querySelector('#curPage').innerHTML = 1;
                 initial = false;
                 document.querySelector("#pageNum").innerHTML = data?.totalPages || 1;
@@ -363,6 +370,7 @@ async function search(input = true, page = 1) {
         console.error('Search error:', err);
     }
 }
+
 function compareArrays(a, b) {
     const normA = Array.from(a, x => x ?? undefined);
     const normB = Array.from(b, x => x ?? undefined);
@@ -372,12 +380,13 @@ function compareArrays(a, b) {
         normA.every((val, i) => val === normB[i])
     );
 }
-function removeFilter(e,field, specific=null) {
+
+function removeFilter(e, field, specific = null) {
     e.stopPropagation()
     const prev = JSON.parse(JSON.stringify(window.currentFilters[field]))
     if (!specific) window.currentFilters[field] = window.distinct[field]
-    else if (window.currentFilters[field].map((i)=>i.toString()).includes(specific)) {
-        delete window.currentFilters[field][window.currentFilters[field].map((i)=>i.toString()).indexOf(specific)]
+    else if (window.currentFilters[field].map((i) => i.toString()).includes(specific)) {
+        delete window.currentFilters[field][window.currentFilters[field].map((i) => i.toString()).indexOf(specific)]
         window.currentFilters[field] = window.currentFilters[field].filter(x => x !== undefined)
     } else {
         window.currentFilters[field].push(parseInt(specific) ? parseInt(specific) : specific)
@@ -385,11 +394,13 @@ function removeFilter(e,field, specific=null) {
     }
     updateFilters((!compareArrays(prev, window.currentFilters[field])) && (!(window.distinct[field].length === 1)))
 }
+
 let openDrop = null
-function openDropdown(e,field) {
+
+function openDropdown(e, field) {
     e.stopPropagation()
     for (let f in window.distinct) {
-        if (f===field) continue;
+        if (f === field) continue;
         document.querySelector(`.${f}Dropdown`).classList.remove('show')
     }
     if (openDrop === field) {
@@ -400,6 +411,7 @@ function openDropdown(e,field) {
 
     document.querySelector(`.${field}Dropdown`).classList.toggle('show')
 }
+
 document.addEventListener('click', () => {
     // alert(openDrop)
     if (openDrop) {
@@ -409,12 +421,14 @@ document.addEventListener('click', () => {
         openDrop = null
     }
 })
+
 function cleanText(text) {
     if (text.toString().includes('paper-')) {
         return `Paper ${text.split('paper-')[1]}`
     }
     return text
 }
+
 async function updateFilters(doSearch = true, first = false) {
     if (window?.distinct) {
         if (!first) await fetchFilters(false)
@@ -431,32 +445,30 @@ async function updateFilters(doSearch = true, first = false) {
                 if (window.distinct[field].length === 1) {
                     innerText = cleanText(window.distinct[field][0])
                 }
-            }
-            else if (window.currentFilters[field].length === 1) {
+            } else if (window.currentFilters[field].length === 1) {
                 innerText = cleanText(window.currentFilters[field][0])
-            }
-            else if (!compareArrays(window.currentFilters[field].map((i)=>i.toString()).sort(),window.distinct[field].map((i)=>i.toString()).sort())) {
-                innerText = window.currentFilters[field].map(i=>cleanText(i)).sort().join(', ')
+            } else if (!compareArrays(window.currentFilters[field].map((i) => i.toString()).sort(), window.distinct[field].map((i) => i.toString()).sort())) {
+                innerText = window.currentFilters[field].map(i => cleanText(i)).sort().join(', ')
             }
             pastInnerTexts.push(innerText)
             newDiv.innerHTML = `
                 <h6 class="filterText">
-                    <div class="${field}Dropdown searchFilterContainer dropdownWrapper ${openDrop && openDrop===field ? 'show' : ''}">
-                    ${pastInnerTexts.map((item, i)=>{
-                        return `
+                    <div class="${field}Dropdown searchFilterContainer dropdownWrapper ${openDrop && openDrop === field ? 'show' : ''}">
+                    ${pastInnerTexts.map((item, i) => {
+                return `
                             <div class="filterItem">
                             ${
-                            i === pastInnerTexts.length - 1 ? 
-                                `<div class="dropdownBox">
-                                            ${window.distinct[field].sort().map((item,i) => {
-                                    return `<div onclick="removeFilter(event,'${field}', '${item}')" class="dropdownItem ${window.currentFilters[field].map((i)=>i.toString()).includes(item.toString()) ? 'selected' : ''}">
+                    i === pastInnerTexts.length - 1 ?
+                        `<div class="dropdownBox">
+                                            ${window.distinct[field].sort().map((item, i) => {
+                            return `<div onclick="removeFilter(event,'${field}', '${item}')" class="dropdownItem ${window.currentFilters[field].map((i) => i.toString()).includes(item.toString()) ? 'selected' : ''}">
                                     <h6 class="dropdownText">
                                         ${cleanText(item)}
                                     </h6>
                                 </div>`
-                                }).join('')}
+                        }).join('')}
 </div>` : ``
-                            }
+                }
                     ${Object.keys(window.distinct)[i]}
                     <span class="innerText">
                         ${item}
@@ -475,7 +487,7 @@ async function updateFilters(doSearch = true, first = false) {
                     </span>
                 </div>
                         `
-                
+
             }).join('')}
                     
 
@@ -506,8 +518,10 @@ async function updateFilters(doSearch = true, first = false) {
         }
     }
 }
+
 window.currentFilters = {}
-async function fetchFilters(update=true, first = false) {
+
+async function fetchFilters(update = true, first = false) {
     console.log(window.currentFilters)
     const res = await fetch(`${prefix}/api/filters?c=${encodeURIComponent(JSON.stringify(window.currentFilters))}`);
     const data = await res.json();
@@ -543,13 +557,14 @@ function checkNav() {
         document.querySelector('.nextPage').classList.remove('greyed');
     }
 }
+
 function prevPage() {
     if (pageNum - 1 < 1) return;
     pageNum--;
     checkNav()
 
     document.querySelector('#curPage').innerHTML = pageNum;
-    search(false,pageNum)
+    search(false, pageNum)
 }
 
 function nextPage() {
@@ -558,5 +573,5 @@ function nextPage() {
     pageNum += 1;
     checkNav()
     document.querySelector('#curPage').innerHTML = pageNum;
-    search(false,pageNum);
+    search(false, pageNum);
 }
