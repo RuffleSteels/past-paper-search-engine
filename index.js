@@ -284,6 +284,15 @@ async function main() {
     const papers = await prisma.examPaper.findMany({
         where
     });
+    await prisma.questionText.deleteMany({
+        where: {
+            question: {
+                document: 'qp',
+                examBoard: 'ocr-b',
+                subject: 'chemistry',
+            },
+        },
+    });
     // //
     await prisma.examQuestion.deleteMany({
         where
