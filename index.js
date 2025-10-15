@@ -186,7 +186,7 @@ async function processMs(paperr) {
      // rotate first page 90° CW
     const pdfBytes = await pdfDoc.save();
     const srcDoc = await PDFDocument.load(pdfBytes);
-    const result = await extractPageSplitsMs(pdfPath, srcDoc);
+    const result = await extractPageSplitsMs(pdfPath, srcDoc, examBoard);
 
     // console.log(re)
 
@@ -274,33 +274,33 @@ async function main() {
     //     },
     // }
     const where =         {
-        document: 'qp',
+        document: 'ms',
         examBoard: 'ocr-b',
         subject: 'chemistry',
-            // paper: 'paper-1',
+        // paper: 'paper-1',
         // year: 2023,
         // label: 'specimen',
     }
     const papers = await prisma.examPaper.findMany({
         where
     });
-    await prisma.questionText.deleteMany({
-        where: {
-            question: {
-                document: 'qp',
-                examBoard: 'ocr-b',
-                subject: 'chemistry',
-            },
-        },
-    });
-    // //
+    // await prisma.questionText.deleteMany({
+    //     where: {
+    //         question: {
+    //             document: 'qp',
+    //             examBoard: 'ocr-b',
+    //             subject: 'chemistry',
+    //         },
+    //     },
+    // });
+
     await prisma.examQuestion.deleteMany({
         where
     })
     console.log(papers)
     for (const paper of papers) {
         try {
-            await processPaper(paper);
+            await processMs(paper);
         } catch (err) {
             console.error(`❌ Failed processing ${paper.path}`, err);
         }

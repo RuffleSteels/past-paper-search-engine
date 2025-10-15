@@ -44,7 +44,7 @@ function isValidString(str) {
     const regex = /^\s*\*?\s*(?:[1-9]|[1-9][0-9])\**\s*(?:(?:\(?[a-z](?:i+)?\)?|\(?i+\)?)\**)*\s*$/i;
     return regex.test(str.replace(/\s+/g, ''));
 }
-export async function extractPageSplitsMs(pdfPath, srcDoc) {
+export async function extractPageSplitsMs(pdfPath, srcDoc, board) {
     const newDoc = await PDFDocument.create();
     const [srcPage] = await newDoc.copyPages(srcDoc, [1]);
 
@@ -57,6 +57,7 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
     let minX = 0;
     let maxX = 1;
     let residual = ''
+    let leftBound = board === 'ocr-b' ? 0 : 80
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1 })
@@ -64,10 +65,19 @@ export async function extractPageSplitsMs(pdfPath, srcDoc) {
 
         const textContent = await page.getTextContent();
 
+        if (leftBound === 0 || leftBound > 80) {
+            for (const item of textContent.items) {
+                const text = (item.str || "");
+                if (text === 'Question' && getTextItemRect(item, viewport, ctx).top < 200) {
+                    leftBound = getTextItemRect(item, viewport, ctx).left + 25
+                }
+            }
+        }
+
         for (const item of textContent.items) {
             const text = (item.str || "").toLowerCase();
 
-            if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctx).left < 80 ) {
+            if (parseInt(text.replace(/\*/g, "")) && isValidString(text) && getTextItemRect(item, viewport, ctx).left < leftBound ) {
                 const clean = text.replace(/\D/g, "")
                 console.log(clean)
                 if (parseInt(clean) === questionCounter) {
